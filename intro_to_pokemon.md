@@ -47,6 +47,13 @@ The **Generation 1 OU Battle Dataset** is a collection of battle records from co
 - **Burn:** Attack is halved.
 - **Freeze:** Pokémon cannot move until thawed.
 
+### Effects
+- Modify mechanics beyond basic stats/status.
+- Field / team effects: affect a whole side (examples: Reflect, Light Screen, Safeguard); usually last a fixed number of turns.
+- Volatile / individual effects: apply to a single Pokémon (examples: Confusion, Substitute, Leech Seed); often cleared on switch or after a few turns.
+- Multiple effects can coexist; some persist, others are time-limited.
+- "No effect" indicates no special effects are active.
+
 ### Items
 - **Consumable Items:** Players can use items like Potion or X Attack once per battle.
 - **Held Items:** Not present in Generation 1.
