@@ -10,7 +10,6 @@ if __name__ == '__main__':
     #importer.display_first_battle()
 
     train_data_extractor = BattleFeatureExtractor(importer.train_data)
-    train_data_extractor.process()
     print("\nTraining features preview:")
     print(train_data_extractor.data_df.head().to_string(index=False))
 

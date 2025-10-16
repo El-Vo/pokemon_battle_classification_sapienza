@@ -1,4 +1,6 @@
 import pandas as pd
+from datetime import datetime
+import os
 
 class TestModel:
 
@@ -18,7 +20,10 @@ class TestModel:
             'player_won': test_predictions
         })
 
-        # Save the DataFrame to a .csv file
-        submission_df.to_csv('results/submission.csv', index=False)
+        # Ensure results directory exists and save the DataFrame to a timestamped .csv file
+        os.makedirs('results', exist_ok=True)
+        now = datetime.now()
+        filename = f"results/submission_{now:%Y%m%d_%H%M%S}.csv"
+        submission_df.to_csv(filename, index=False)
 
-        print("\n'submission.csv' file created successfully!")
+        print(f"\nSubmission file created: {filename}")
