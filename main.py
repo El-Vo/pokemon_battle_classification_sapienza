@@ -21,8 +21,7 @@ if __name__ == '__main__':
 
     # Run this part if you want to let the model predict the outcomes for the 
     # test dataset, create a submission csv file and save it to the 'results' directory
-    #importer.load_test()
-    #test_data_extractor = BattleFeatureExtractor(importer.test_data)
-    #test_data_extractor.process()
-    #test = TestModel(model, test_data_extractor.data_df, features)
-    #test.test()
+    importer.load_test()
+    test_data_extractor = BattleFeatureExtractor(importer.test_data)
+    test = TestModel(model, test_data_extractor.data_df, features)
+    test.test()
