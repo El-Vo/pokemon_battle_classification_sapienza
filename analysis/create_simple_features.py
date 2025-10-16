@@ -10,7 +10,13 @@ class BattleFeatureExtractor:
 
     def __init__(self, data: List[Dict]):
         self.data = data
-        self.data_df = self.create_simple_features(self.data)
+        self.data_df: Optional[pd.DataFrame] = None
+
+    def process(self) -> pd.DataFrame:
+        """Compute the feature DataFrame once and cache the result."""
+        if self.data_df is None:
+            self.data_df = self.create_simple_features(self.data)
+        return self.data_df
 
     def create_simple_features(self, data: List[Dict]) -> pd.DataFrame:
         """
