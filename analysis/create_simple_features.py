@@ -44,6 +44,12 @@ class BattleFeatureExtractor:
             # --- Player 1 Team Features ---
             p1_team = battle.get('p1_team_details', [])
             if p1_team:
+
+                features['p1_mean_hp'] = np.mean([p.get('base_hp', 0) for p in p1_team])
+                features['p1_mean_spe'] = np.mean([p.get('base_spe', 0) for p in p1_team])
+                features['p1_mean_atk'] = np.mean([p.get('base_atk', 0) for p in p1_team])
+                features['p1_mean_def'] = np.mean([p.get('base_def', 0) for p in p1_team])
+
                 features['p1_dead_pokemons'] = self.count_dead_pokemons(battle_info_p1['pokemon_hp'])
                 features['p1_hp_loss'] = self.calculate_hp_loss(battle_info_p1['pokemon_hp'])
                 features['p1_avg_status'] = battle_info_p1['status_count'] / 30 # Divide by the total number of rounds
@@ -54,6 +60,12 @@ class BattleFeatureExtractor:
             p2_lead = battle.get('p2_lead_details')
             if p2_lead:
                 # Player 2's lead Pokémon's stats
+
+                features['p2_lead_hp'] = p2_lead.get('base_hp', 0)
+                features['p2_lead_spe'] = p2_lead.get('base_spe', 0)
+                features['p2_lead_atk'] = p2_lead.get('base_atk', 0)
+                features['p2_lead_def'] = p2_lead.get('base_def', 0)
+
                 features['p2_dead_pokemons'] = self.count_dead_pokemons(battle_info_p2['pokemon_hp'])
                 features['p2_hp_loss'] = self.calculate_hp_loss(battle_info_p2['pokemon_hp'])
                 features['p2_avg_status'] = battle_info_p2['status_count'] / 30 # Divide by the total number of rounds
