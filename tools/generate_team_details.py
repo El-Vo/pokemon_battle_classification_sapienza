@@ -12,8 +12,8 @@ import os
 from typing import Any, Dict, Iterable, List, Optional
 
 
-class P2TeamRosterExtractor:
-	"""Collect p2 roster names for each battle."""
+class TeamRosterExtractor:
+	"""Collect p1 and p2 roster names for each battle."""
 
 	def __init__(self, battles: Iterable[Dict[str, Any]]):
 		self.battles: List[Dict[str, Any]] = list(battles)
@@ -71,17 +71,17 @@ class P2TeamRosterExtractor:
 		names: List[str] = []
 
 		# Lead Pokémon details (if present)
-		P2TeamRosterExtractor._maybe_append_name(battle.get('p2_lead_details'), names)
+		TeamRosterExtractor._maybe_append_name(battle.get('p2_lead_details'), names)
 
 		# Declared team list
 		for member in (battle.get('p2_team_details') or []):
-			P2TeamRosterExtractor._maybe_append_name(member, names)
+			TeamRosterExtractor._maybe_append_name(member, names)
 
 		# Timeline states reveal the active Pokémon at each turn
 		for turn in (battle.get('battle_timeline') or []):
 			if isinstance(turn, dict):
 				state = turn.get('p2_pokemon_state')
-				P2TeamRosterExtractor._maybe_append_name(state, names)
+				TeamRosterExtractor._maybe_append_name(state, names)
 
 		return _deduplicate(names)
 
@@ -120,8 +120,8 @@ if __name__ == '__main__':
 	importer = ImportSourceJsonl()
 	importer.load_train()
 
-	extractor = P2TeamRosterExtractor(importer.train_data)
-	output_path = 'data/p2_team_rosters_train.json'
+	extractor = TeamRosterExtractor(importer.train_data)
+	output_path = 'data/team_rosters_train.json'
 	extractor.save(output_path)
 
 	print(f"Saved {len(extractor.build_roster())} battle roster entries to {output_path}.")

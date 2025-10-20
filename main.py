@@ -16,7 +16,7 @@ if __name__ == '__main__':
     features = [col for col in train_df.columns if col not in ['battle_id', 'player_won']]
 
     trainer = RunLogisticRegression(train_df, features)
-    log_results = False
+    log_results = True
     model = trainer.train_model(log_results)
 
     performance_report = trainer.evaluate_training_performance()
