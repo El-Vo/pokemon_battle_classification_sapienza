@@ -2,7 +2,9 @@ from tqdm.auto import tqdm
 import numpy as np
 import pandas as pd
 from typing import List, Dict, Optional
+from tools.calculate_attack_effectiveness import AttackEffectivenessCalculator
 
+NEGATIVE_STATUS = ["par", "brn", "frz", "slp", "psn", "tox"]
 
 class BattleFeatureExtractor:
     """Encapsulate feature extraction from battleJSONL data.
@@ -29,7 +31,7 @@ class BattleFeatureExtractor:
             features: Dict = {}
 
             # Get the last documented hp for each players pokemons
-            p1_pokemon_hp, p2_pokemon_hp = self.get_pokemon_hp(battle.get('battle_timeline', []))
+            battle_info_p1, battle_info_p2 = self.get_battle_info(battle.get('battle_timeline', []))
 
             # --- Player 1 Team Features ---
             p1_team = battle.get('p1_team_details', [])
@@ -38,8 +40,9 @@ class BattleFeatureExtractor:
                 features['p1_mean_spe'] = np.mean([p.get('base_spe', 0) for p in p1_team])
                 features['p1_mean_atk'] = np.mean([p.get('base_atk', 0) for p in p1_team])
                 features['p1_mean_def'] = np.mean([p.get('base_def', 0) for p in p1_team])
-                features['p1_dead_pokemons'] = self.count_dead_pokemons(p1_pokemon_hp)
-                features['p1_hp_loss'] = self.calculate_hp_loss(p1_pokemon_hp)
+                features['p1_dead_pokemons'] = self.count_dead_pokemons(battle_info_p1['pokemon_hp'])
+                features['p1_hp_loss'] = self.calculate_hp_loss(battle_info_p1['pokemon_hp'])
+                features['p1_avg_status'] = battle_info_p1['status_count'] / 30 # Divide by the total number of rounds
 
 
             # --- Player 2 Lead Features ---
@@ -50,8 +53,9 @@ class BattleFeatureExtractor:
                 features['p2_lead_spe'] = p2_lead.get('base_spe', 0)
                 features['p2_lead_atk'] = p2_lead.get('base_atk', 0)
                 features['p2_lead_def'] = p2_lead.get('base_def', 0)
-                features['p2_dead_pokemons'] = self.count_dead_pokemons(p2_pokemon_hp)
-                features['p2_hp_loss'] = self.calculate_hp_loss(p2_pokemon_hp)
+                features['p2_dead_pokemons'] = self.count_dead_pokemons(battle_info_p2['pokemon_hp'])
+                features['p2_hp_loss'] = self.calculate_hp_loss(battle_info_p2['pokemon_hp'])
+                features['p2_avg_status'] = battle_info_p2['status_count'] / 30 # Divide by the total number of rounds
 
             # We also need the ID and the target variable (if it exists)
             features['battle_id'] = battle.get('battle_id')
@@ -62,26 +66,31 @@ class BattleFeatureExtractor:
 
         return pd.DataFrame(feature_list).fillna(0)
     
-    def get_pokemon_hp(self, battle_timeline: List[Dict]) -> Dict[str, int]:
-        """Calculate the last documented HP for each Pokémon in the battle.
-
-        This function iterates through the battle timeline and saves the last known HP
-        for each Pokémon.
+    def get_battle_info(self, battle_timeline: List[Dict]) -> Dict:
+        """Collect battle information from the last 30 rounds. The last documented HP for each 
+        Pokémon in the battle is collected as well as the number of rounds with a negative status for each player.
 
         Returns:
-            A dictionary with Pokémon names as keys and their total HP loss as values.
+            A dictionary with each pokemons hp and the total number of rounds with a status.
         """
-        hp_p1 = {}
-        hp_p2 = {}
+
+        battle_info_p1 = {'pokemon_hp': {}, 'status_count': 0}
+        battle_info_p2 = {'pokemon_hp': {}, 'status_count': 0}
 
         for turn in battle_timeline:
             for player_key in ['p1_pokemon_state', 'p2_pokemon_state']:
                 pokemon_state = turn.get(player_key, {})
                 pokemon_name = pokemon_state.get('name')
                 current_hp = pokemon_state.get('hp_pct')
-                dict_name = hp_p1 if player_key == 'p1_pokemon_state' else hp_p2
-                dict_name[pokemon_name] = current_hp
-        return hp_p1, hp_p2
+
+                # Get the name of the dictonary to store the information based on which player it is
+                dict_name = battle_info_p1 if player_key == 'p1_pokemon_state' else battle_info_p2
+                dict_name['pokemon_hp'][pokemon_name] = current_hp
+
+                if pokemon_state.get("status") in NEGATIVE_STATUS:
+                    dict_name['status_count'] += 1
+
+        return battle_info_p1, battle_info_p2
         
     def count_dead_pokemons(self, hp_dict: Dict[str, float]) -> int:
         """
