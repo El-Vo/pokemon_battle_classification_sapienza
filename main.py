@@ -10,18 +10,23 @@ if __name__ == '__main__':
     #importer.display_first_battle()
 
     train_data_extractor = BattleFeatureExtractor(importer.train_data)
-    print("\nTraining features preview:")
-    print(train_data_extractor.data_df.head().to_string(index=False))
+    train_df = train_data_extractor.process()
 
     # Exclude battle_id (because it has no informative value) and player_won (because this is the variable we want to predict)
-    features = [col for col in train_data_extractor.data_df.columns if col not in ['battle_id', 'player_won']]
+    features = [col for col in train_df.columns if col not in ['battle_id', 'player_won']]
 
-    trainer = RunLogisticRegression(train_data_extractor.data_df, features)
-    model = trainer.train_model()
+    trainer = RunLogisticRegression(train_df, features)
+    log_results = True
+    model = trainer.train_model(log_results)
+
+    performance_report = trainer.evaluate_training_performance()
+    print("\nTraining performance summary:\n")
+    performance_report.print(top_k=10)
 
     # Run this part if you want to let the model predict the outcomes for the 
     # test dataset, create a submission csv file and save it to the 'results' directory
-    importer.load_test()
-    test_data_extractor = BattleFeatureExtractor(importer.test_data)
-    test = TestModel(model, test_data_extractor.data_df, features)
-    test.test()
+    #importer.load_test()
+    #test_data_extractor = BattleFeatureExtractor(importer.test_data)
+    #test_df = test_data_extractor.process()
+    #test = TestModel(model, test_df, features)
+    #test.test()
