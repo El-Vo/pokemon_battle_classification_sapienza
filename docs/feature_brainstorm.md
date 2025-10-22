@@ -2,10 +2,16 @@
 
 - Rock-paper-scissors matchup between opposing pokemon types
     - Reconstruct enemy pokemon roster
-- Level difference between opposing pokemon
 - Identify strategies used by players to assess their skill?
     - Identify "bad" moves?
     - Some strategies are on the [smogon wiki (e.g. for alakazam)](https://www.smogon.com/dex/rb/pokemon/alakazam/)
+
+- implement with Random forest
+- count switching pokemon
+- accounting for boosts
+- Ratio between dealt and received damage
+- Count Pokemon not only with no hp but with low/critical hp
+- Not only count status effects but count rounds with negative status effects
 
 # Notes about the dataset:
 - Battles aren't necessarily documented from start to finish, "only" the first 30 rounds are documented
