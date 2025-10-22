@@ -1,0 +1,7 @@
+analysis/__pycache__/*
+prepare_data/__pycache__/*
+results/*
+data/*
+.vscode/settings.json
+.DS_Store
+tools/__pycache__/*
