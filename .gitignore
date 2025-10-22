@@ -39,6 +39,7 @@ data/combined_samples.json
 
 # Generated visualizations
 visualizations/
+example_visualizations/
 *.png
 
 # Results
