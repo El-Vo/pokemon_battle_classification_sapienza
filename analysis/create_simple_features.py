@@ -80,12 +80,12 @@ class BattleFeatureExtractor:
 
         return pd.DataFrame(feature_list).fillna(0)
     
-    def get_battle_info(self, battle_timeline: List[Dict]) -> Dict:
+    def get_battle_info(self, battle_timeline: List[Dict]) -> tuple:
         """Collect battle information from the last 30 rounds. The last documented HP for each 
         Pokémon in the battle is collected as well as the number of rounds with a negative status for each player.
 
         Returns:
-            A dictionary with each pokemons hp and the total number of rounds with a status.
+            A tuple with two dictionaries with each pokemons hp and the total number of rounds with a status.
         """
 
         battle_info_p1 = {'pokemon_hp': {}, 'status_count': 0}
@@ -95,7 +95,7 @@ class BattleFeatureExtractor:
         # start of the battle. This way, we do not miss p1's pokemon that do not get summoned during the first 30 turns.
         roster_map = self._load_team_rosters()
         if self._active_battle_id is None or self._active_battle_id not in roster_map:
-            return []
+            return battle_info_p1,battle_info_p2
         entry = roster_map[self._active_battle_id]
         for pokemon_name in entry['p1_team']:
             battle_info_p1['pokemon_hp'][pokemon_name] = 1.0
