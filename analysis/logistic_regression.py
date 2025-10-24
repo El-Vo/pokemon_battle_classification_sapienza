@@ -1,7 +1,10 @@
 import pandas as pd
+from sklearn.discriminant_analysis import StandardScaler
 from sklearn.linear_model import LogisticRegression as SklearnLogisticRegression
 from sklearn.metrics import accuracy_score
 from typing import Optional
+
+from sklearn.pipeline import make_pipeline
 
 from analysis.accuracy_results_logger import AccuracyResultsLogger
 from analysis.model_performance import ModelPerformanceReport, summarize_model_performance
@@ -22,23 +25,28 @@ class RunLogisticRegression:
 
         # Initialize and train the model
         print("Training a simple Logistic Regression model...")
-        model = SklearnLogisticRegression(
-            random_state=42,
-            max_iter=10000,
-            solver='lbfgs',
-            penalty=None
+        
+        self.model = make_pipeline(
+            StandardScaler(),
+            SklearnLogisticRegression(
+                random_state=42,
+                penalty="l2",
+                C=1.0,
+                max_iter=10000,
+                solver='saga'
+            )
         )
-        model.fit(X_train, y_train)
-        self.model = model
+
+
+        self.model.fit(X_train, y_train)
 
         # Compute and print training accuracy
-        train_preds = model.predict(X_train)
+        train_preds = self.model.predict(X_train)
         acc = accuracy_score(y_train, train_preds)
 
         if log_result:
             self._log_training_accuracy(X_train, y_train)
-
-        return model
+        return self.model
 
     def _log_training_accuracy(self, X_train, y_train) -> None:
         train_preds = self.model.predict(X_train)
