@@ -38,7 +38,7 @@ class BattleFeatureExtractor:
             self._active_battle_id = battle.get('battle_id')
 
             # Get the last documented hp for each players pokemons
-            battle_info_p1, battle_info_p2 = self.get_battle_info(battle.get('battle_timeline', []))
+            battle_info_p1, battle_info_p2 = self.get_battle_info(battle.get('battle_timeline', []), battle.get('p1_team_details', []))
 
             # --- Player 1 Team Features ---
             p1_team = battle.get('p1_team_details', [])
@@ -79,7 +79,7 @@ class BattleFeatureExtractor:
 
         return pd.DataFrame(feature_list).fillna(0)
     
-    def get_battle_info(self, battle_timeline: List[Dict]) -> tuple:
+    def get_battle_info(self, battle_timeline: List[Dict], p1_team: List[Dict]) -> tuple:
         """Collect battle information from the last 30 rounds. The last documented HP for each 
         Pokémon in the battle is collected as well as the number of rounds with a negative status for each player.
 
@@ -89,20 +89,13 @@ class BattleFeatureExtractor:
 
         battle_info_p1 = {'pokemon_hp': {}, 'status_count': 0}
         battle_info_p2 = {'pokemon_hp': {}, 'status_count': 0}
+        
         """
-        # In order to create a complete baseline for all known pokemons involved, every pokemon is added with full hp at the 
+        # In order to create a complete baseline for all known pokemons involved, every known pokemon is added with full hp at the 
         # start of the battle. This way, we do not miss p1's pokemon that do not get summoned during the first 30 turns.
-        roster_map = self._load_team_rosters()
-        if self._active_battle_id is None or self._active_battle_id not in roster_map:
-            return battle_info_p1,battle_info_p2
-        entry = roster_map[self._active_battle_id]
-        for pokemon_name in entry['p1_team']:
-            battle_info_p1['pokemon_hp'][pokemon_name] = 1.0
-
-        for pokemon_name in entry['p2_team']:
-            battle_info_p2['pokemon_hp'][pokemon_name] = 1.0
+        for pokemon in p1_team:
+            battle_info_p1['pokemon_hp'][pokemon['name']] = 1.0
         """
-   
         # Add additional health and status information from battle turns
         for turn in battle_timeline:
             for player_key in ['p1_pokemon_state', 'p2_pokemon_state']:
@@ -116,6 +109,14 @@ class BattleFeatureExtractor:
 
                 if pokemon_state.get("status") in NEGATIVE_STATUS:
                     dict_name['status_count'] += 1
+        """            
+        # In order to even out the amount of pokemone to six per team, placeholder pokemon are added
+        # to p2's team for every unknown pokemon
+        name_var = 0
+        while len(battle_info_p2['pokemon_hp']) < 6:
+            battle_info_p2['pokemon_hp'][f'placeholder_{name_var}'] = 1.0
+            name_var += 1
+        """
 
         return battle_info_p1, battle_info_p2
         
