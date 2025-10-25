@@ -3,41 +3,44 @@ import pandas as pd
 import os
 
 
-class ImportSourceJsonl:
-    """Helper class to load `train.jsonl`/`test.jsonl` files.
+class ImportSource:
+    """Helper class to load `train.jsonl`/`test.jsonl` files and regular json files.
 
     Provides simple methods to load the training file and display the
     structure of the first battle for inspection.
     """
 
-    def __init__(self, data_path: str = './data'):
-        self.data_path = data_path
-        self.train_file_path = os.path.join(self.data_path, 'train.jsonl')
-        self.test_file_path = os.path.join(self.data_path, 'test.jsonl')
-        self.train_data = []
-        self.test_data = []
+    def __init__(self):
+        self.data = []
 
-    def load_train(self) -> None:
-        """Load `train.jsonl` line-by-line into `self.train_data`.
+    def load_jsonl(self, file_path: str) -> None:
+        """Load `.jsonl` file line-by-line into `self.train_data`.
         """
-        print(f"Loading data from '{self.train_file_path}'...")
-        with open(self.train_file_path, 'r') as f:
+        print(f"Loading data from '{file_path}'...")
+        with open(file_path, 'r') as f:
             for line in f:
                 # json.loads() parses one line (one JSON object) into a Python dictionary
-                self.train_data.append(json.loads(line))
+                self.data.append(json.loads(line))
 
-        print(f"Successfully loaded {len(self.train_data)} battles.")
+        print(f"Successfully loaded {len(self.data)} battles.")
 
-    def load_test(self) -> None:
-        """Load `test.jsonl` line-by-line into `self.test_data`.
+    def load_json(self, file_path: str) -> None:
+        """Load a single `.json` file into `self.data`.
+        
+        If the JSON file contains a single battle object, it will be wrapped in a list.
+        If it contains a list of battles, it will be extended to `self.data`.
         """
-        print(f"Loading data from '{self.test_file_path}'...")
-        with open(self.test_file_path, 'r') as f:
-            for line in f:
-                # json.loads() parses one line (one JSON object) into a Python dictionary
-                self.test_data.append(json.loads(line))
-
-        print(f"Successfully loaded {len(self.test_data)} battles.")
+        print(f"Loading data from '{file_path}'...")
+        with open(file_path, 'r') as f:
+            json_data = json.load(f)
+        
+        # Check if the loaded data is a list or a single object
+        if isinstance(json_data, list):
+            self.data.extend(json_data)
+            print(f"Successfully loaded {len(json_data)} battles.")
+        else:
+            self.data.append(json_data)
+            print(f"Successfully loaded 1 battle.")
 
     def display_first_battle(self, truncate: int = 1, truncate_threshold: int = 1) -> None:
         """Print the structure of the first loaded battle.
@@ -47,8 +50,8 @@ class ImportSourceJsonl:
             truncate_threshold: length above which a truncation notice is shown.
         """
         print("\n--- Structure of the first train battle: ---")
-        if self.train_data:
-            first_battle = self.train_data[0]
+        if self.data:
+            first_battle = self.data[0]
 
             # To keep the output clean, we can create a copy and truncate the timeline
             battle_for_display = first_battle.copy()

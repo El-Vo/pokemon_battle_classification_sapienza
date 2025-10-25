@@ -11,18 +11,18 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
 	sys.path.append(str(PROJECT_ROOT))
 
-from prepare_data.import_source_jsonl import ImportSourceJsonl
+from prepare_data.import_source import ImportSource
 
 
 class MostSuccessfulPokemonVisualizer:
 	"""Create a bar chart for Pokémon and the number of battles they won."""
 
 	def __init__(self, data_path: str = "./data") -> None:
-		self.data_source = ImportSourceJsonl(data_path)
+		self.data_source = ImportSource()
 
 	def _ensure_train_data_loaded(self) -> None:
-		if not self.data_source.train_data:
-			self.data_source.load_train()
+		if not self.data_source.data:
+			self.data_source.load_jsonl('./data/train.jsonl')
 
 	def compute_win_counts(self) -> Dict[str, int]:
 		"""Return a mapping of Pokémon name to the number of battles won."""
@@ -30,7 +30,7 @@ class MostSuccessfulPokemonVisualizer:
 		self._ensure_train_data_loaded()
 
 		win_counter: Counter[str] = Counter()
-		for battle in self.data_source.train_data:
+		for battle in self.data_source.data:
 			if not battle.get("player_won"):
 				continue
 

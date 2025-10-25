@@ -115,12 +115,12 @@ if __name__ == '__main__':
 	if str(root) not in sys.path:
 		sys.path.insert(0, str(root))
 
-	from prepare_data.import_source_jsonl import ImportSourceJsonl
+	from prepare_data.import_source import ImportSource
 
-	importer = ImportSourceJsonl()
-	importer.load_train()
+	importer = ImportSource()
+	importer.load_jsonl('./data/train.jsonl')
 
-	extractor = TeamRosterExtractor(importer.train_data)
+	extractor = TeamRosterExtractor(importer.data)
 	output_path = 'data/team_rosters_train.json'
 	extractor.save(output_path)
 

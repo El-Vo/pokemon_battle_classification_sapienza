@@ -14,7 +14,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
 	sys.path.append(str(PROJECT_ROOT))
 
-from prepare_data.import_source_jsonl import ImportSourceJsonl
+from prepare_data.import_source import ImportSource
 
 
 TeamKey = Tuple[str, ...]
@@ -23,20 +23,20 @@ TeamKey = Tuple[str, ...]
 class MostSuccessfulTeamsRadarVisualizer:
 	"""Create a spider network that connects Pokémon winning together."""
 
-	def __init__(self, data_path: str = "./data") -> None:
-		self.data_source = ImportSourceJsonl(data_path)
+	def __init__(self) -> None:
+		self.data_source = ImportSource()
 
-	def _ensure_train_data_loaded(self) -> None:
-		if not self.data_source.train_data:
-			self.data_source.load_train()
+	def _ensure_train_data_loaded(self, data_path: str = "./data") -> None:
+		if not self.data_source.data:
+			self.data_source.load_jsonl(data_path)
 
 	def compute_team_win_counts(self) -> Counter[TeamKey]:
 		"""Return win counts per team combination."""
 
-		self._ensure_train_data_loaded()
+		self._ensure_train_data_loaded(str(DEFAULT_DATA_PATH))
 		team_win_counter: Counter[TeamKey] = Counter()
 
-		for battle in self.data_source.train_data:
+		for battle in self.data_source.data:
 			if not battle.get("player_won"):
 				continue
 
@@ -169,12 +169,11 @@ SHOW_PLOT = True
 
 
 def main() -> None:
-	data_path = str(DEFAULT_DATA_PATH)
 	top_n = DEFAULT_TOP_N
 	save_path = str(DEFAULT_SAVE_PATH) if DEFAULT_SAVE_PATH else None
 	show_plot = SHOW_PLOT or save_path is None
 
-	visualizer = MostSuccessfulTeamsRadarVisualizer(data_path=data_path)
+	visualizer = MostSuccessfulTeamsRadarVisualizer()
 	visualizer.plot(top_n=top_n, save_path=save_path)
 
 	if show_plot:

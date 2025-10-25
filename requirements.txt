@@ -4,3 +4,4 @@ tqdm
 scikit-learn
 matplotlib
 seaborn
+beautifulsoup4

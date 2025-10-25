@@ -28,8 +28,7 @@ class BattleFeatureExtractor:
 
     def create_simple_features(self, data: List[Dict]) -> pd.DataFrame:
         """
-        A very basic feature extraction function.
-        It only uses the aggregated base stats of the player's team and opponent's lead.
+        A feature extraction function.
         Returns a pandas DataFrame with missing values filled as 0.
         """
         feature_list: List[Dict] = []
@@ -45,10 +44,10 @@ class BattleFeatureExtractor:
             p1_team = battle.get('p1_team_details', [])
             if p1_team:
 
-                features['p1_mean_hp'] = np.mean([p.get('base_hp', 0) for p in p1_team])
-                features['p1_mean_spe'] = np.mean([p.get('base_spe', 0) for p in p1_team])
-                features['p1_mean_atk'] = np.mean([p.get('base_atk', 0) for p in p1_team])
-                features['p1_mean_def'] = np.mean([p.get('base_def', 0) for p in p1_team])
+                #features['p1_mean_hp'] = np.mean([p.get('base_hp', 0) for p in p1_team])
+                #features['p1_mean_spe'] = np.mean([p.get('base_spe', 0) for p in p1_team])
+                #features['p1_mean_atk'] = np.mean([p.get('base_atk', 0) for p in p1_team])
+                #features['p1_mean_def'] = np.mean([p.get('base_def', 0) for p in p1_team])
 
                 features['p1_dead_pokemons'] = self.count_dead_pokemons(battle_info_p1['pokemon_hp'])
                 features['p1_hp_loss'] = self.calculate_hp_loss(battle_info_p1['pokemon_hp'])
@@ -61,10 +60,10 @@ class BattleFeatureExtractor:
             if p2_lead:
                 # Player 2's lead Pokémon's stats
 
-                features['p2_lead_hp'] = p2_lead.get('base_hp', 0)
-                features['p2_lead_spe'] = p2_lead.get('base_spe', 0)
-                features['p2_lead_atk'] = p2_lead.get('base_atk', 0)
-                features['p2_lead_def'] = p2_lead.get('base_def', 0)
+                #features['p2_lead_hp'] = p2_lead.get('base_hp', 0)
+                #features['p2_lead_spe'] = p2_lead.get('base_spe', 0)
+                #features['p2_lead_atk'] = p2_lead.get('base_atk', 0)
+                #features['p2_lead_def'] = p2_lead.get('base_def', 0)
 
                 features['p2_dead_pokemons'] = self.count_dead_pokemons(battle_info_p2['pokemon_hp'])
                 features['p2_hp_loss'] = self.calculate_hp_loss(battle_info_p2['pokemon_hp'])
@@ -90,7 +89,7 @@ class BattleFeatureExtractor:
 
         battle_info_p1 = {'pokemon_hp': {}, 'status_count': 0}
         battle_info_p2 = {'pokemon_hp': {}, 'status_count': 0}
-
+        """
         # In order to create a complete baseline for all known pokemons involved, every pokemon is added with full hp at the 
         # start of the battle. This way, we do not miss p1's pokemon that do not get summoned during the first 30 turns.
         roster_map = self._load_team_rosters()
@@ -102,6 +101,7 @@ class BattleFeatureExtractor:
 
         for pokemon_name in entry['p2_team']:
             battle_info_p2['pokemon_hp'][pokemon_name] = 1.0
+        """
    
         # Add additional health and status information from battle turns
         for turn in battle_timeline:
