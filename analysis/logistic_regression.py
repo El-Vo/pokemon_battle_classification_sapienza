@@ -9,15 +9,15 @@ from analysis.model_performance import ModelPerformanceReport, summarize_model_p
 
 class RunLogisticRegression:
 
-    def __init__(self, train_df: pd.DataFrame, features):
+    def __init__(self, train_df: pd.DataFrame, feature_names):
         self.train_df = train_df
-        self.features = features
+        self.train_feature_names = feature_names
         self.model: Optional[SklearnLogisticRegression] = None
         self._results_logger = AccuracyResultsLogger()
 
     def train_model(self, log_result: bool = False) -> SklearnLogisticRegression:
         # Define our features (X) and target (y)
-        X_train = self.train_df[self.features]
+        X_train = self.train_df[self.train_feature_names]
         y_train = self.train_df['player_won']
 
         # Initialize and train the model
@@ -43,20 +43,20 @@ class RunLogisticRegression:
     def _log_training_accuracy(self, X_train, y_train) -> None:
         train_preds = self.model.predict(X_train)
         acc = accuracy_score(y_train, train_preds)
-        self._results_logger.append_result(accuracy=acc, features=self.features)
+        self._results_logger.append_result(accuracy=acc, features=self.train_feature_names)
         print(f"Training accuracy appended to {self._results_logger.csv_path}")
 
     def evaluate_training_performance(self) -> ModelPerformanceReport:
         if self.model is None:
             raise ValueError("Model must be trained before evaluation.")
 
-        X_train = self.train_df[self.features]
+        X_train = self.train_df[self.train_feature_names]
         y_train = self.train_df['player_won']
         return summarize_model_performance(
             self.model,
             X_train,
             y_train,
-            feature_names=self.features,
+            feature_names=self.train_feature_names,
         )
 
     def evaluate_dataset(
@@ -68,13 +68,13 @@ class RunLogisticRegression:
         if self.model is None:
             raise ValueError("Model must be trained before evaluation.")
 
-        X = data_frame[self.features]
+        X = data_frame[self.train_feature_names]
         y = data_frame[target_column]
         return summarize_model_performance(
             self.model,
             X,
             y,
-            feature_names=self.features,
+            feature_names=self.train_feature_names,
         )
 
 

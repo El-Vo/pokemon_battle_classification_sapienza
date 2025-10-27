@@ -8,8 +8,8 @@ import sys
 
 class JsonlToJsonConverter:
     """
-    Klasse, die eine .jsonl-Datei in eine valide JSON-Datei umwandelt.
-    Die Originaldatei bleibt unverändert; es wird eine neue Datei erstellt.
+    Class that converts a .jsonl file into a valid JSON file.
+    The original file remains unchanged; a new file is created.
     """
 
     def __init__(
@@ -20,9 +20,9 @@ class JsonlToJsonConverter:
     ) -> None:
         self.input_path = Path(input_path)
         if not self.input_path.exists():
-            raise FileNotFoundError(f"Eingabedatei nicht gefunden: {self.input_path}")
+            raise FileNotFoundError(f"Input file not found: {self.input_path}")
         if self.input_path.suffix.lower() not in {".jsonl", ".ndl", ".txt"}:
-            # .txt and .ndl optionally allowed, but warn is omitted to keep kurz
+            # .txt and .ndl optionally allowed, but warning is omitted to keep it concise
             pass
 
         if output_path is None:
@@ -31,23 +31,23 @@ class JsonlToJsonConverter:
             self.output_path = Path(output_path)
 
         if self.output_path.exists() and not overwrite:
-            # Standardmäßig nicht überschreiben: Suffix mit Zeitstempel anhängen
+            # By default, do not overwrite: append a timestamp suffix
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
             self.output_path = self.output_path.with_name(
                 f"{self.output_path.stem}_converted_{ts}{self.output_path.suffix or '.json'}"
             )
 
     def _default_output_path(self) -> Path:
-        # Ersetze .jsonl durch .json, sonst hänge .json an
+        # Replace .jsonl with .json, otherwise append .json
         if self.input_path.suffix.lower() == ".jsonl":
             return self.input_path.with_suffix(".json")
         return self.input_path.with_suffix(self.input_path.suffix or ".json")
 
     def convert(self) -> Path:
         """
-        Konvertiert die jsonl-Datei in eine JSON-Datei (als Array).
-        Liefert den Pfad zur erzeugten Datei zurück.
-        Bei fehlerhafter JSON-Zeile wird eine ValueError mit Zeilennummer geworfen.
+        Converts the jsonl file into a JSON file (as an array).
+        Returns the path to the generated file.
+        If a JSON line is invalid, a ValueError with the line number is raised.
         """
         first = True
         out_parent = self.output_path.parent
@@ -59,11 +59,11 @@ class JsonlToJsonConverter:
             for i, raw_line in enumerate(fin, start=1):
                 line = raw_line.strip()
                 if not line:
-                    continue  # leere Zeilen überspringen
+                    continue  # skip empty lines
                 try:
                     obj = json.loads(line)
                 except json.JSONDecodeError as e:
-                    raise ValueError(f"Ungültiges JSON in Zeile {i}: {e.msg}") from e
+                    raise ValueError(f"Invalid JSON in line {i}: {e.msg}") from e
 
                 dumped = json.dumps(obj, ensure_ascii=False)
                 if not first:
@@ -75,26 +75,26 @@ class JsonlToJsonConverter:
         return self.output_path
 
 
-# Kurzbeispiel (nur zur Illustration, nicht automatisch ausgeführt):
+# Short example (for illustration only, not automatically executed):
 def main(argv: Optional[list[str]] = None) -> int:
-    """Kleine CLI: konvertiert eine jsonl-Datei in eine JSON-Datei.
+    """Small CLI: converts a jsonl file into a JSON file.
 
-    Rückgabewerte: 0 bei Erfolg, 1 bei Fehler.
+    Return values: 0 on success, 1 on error.
     """
-    parser = argparse.ArgumentParser(description="Konvertiert eine .jsonl-Datei in eine .json-Datei (Array).")
-    parser.add_argument("input", help="Pfad zur Eingabe-.jsonl-Datei")
-    parser.add_argument("-o", "--output", help="Pfad zur Ausgabedatei (optional)")
-    parser.add_argument("--overwrite", action="store_true", help="Bestehende Ausgabedatei überschreiben")
+    parser = argparse.ArgumentParser(description="Converts a .jsonl file into a .json file (array).")
+    parser.add_argument("input", help="Path to the input .jsonl file")
+    parser.add_argument("-o", "--output", help="Path to the output file (optional)")
+    parser.add_argument("--overwrite", action="store_true", help="Overwrite existing output file")
     args = parser.parse_args(argv)
 
     try:
         converter = JsonlToJsonConverter(args.input, output_path=args.output, overwrite=args.overwrite)
         output_path = converter.convert()
-        print(f"Erstellt: {output_path}")
+        print(f"Created: {output_path}")
         return 0
     except Exception as e:
-        # Kurze, nutzerfreundliche Fehlermeldung auf stderr
-        print(f"Fehler: {e}", file=sys.stderr)
+        # Short, user-friendly error message on stderr
+        print(f"Error: {e}", file=sys.stderr)
         return 1
 
 

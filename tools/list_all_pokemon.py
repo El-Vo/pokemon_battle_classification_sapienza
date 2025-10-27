@@ -113,18 +113,19 @@ if __name__ == '__main__':
 		sys.path.insert(0, str(root))
 
 	# Local import after ensuring the project root is on sys.path
-	from prepare_data.import_source_jsonl import ImportSourceJsonl
+	from prepare_data.import_source import ImportSource
 
-	importer = ImportSourceJsonl()
-	importer.load_train()
-	importer.load_test()
+	train_importer = ImportSource()
+	train_importer.load_jsonl('./data/train.jsonl')
+	test_importer = ImportSource()
+	test_importer.load_jsonl('./data/test.jsonl')
 
 	# Combine train and test battles so the roster includes Pokémon from both splits
-	all_battles = importer.train_data + importer.test_data
+	all_battles = train_importer.data + test_importer.data
 
 	summary = PokemonRosterSummary(all_battles)
 	output_path = 'data/pokemon_roster.json'
 	summary.save(output_path)
 
-	print(f"Loaded {len(importer.train_data)} train battles and {len(importer.test_data)} test battles.")
+	print(f"Loaded {len(train_importer.data)} train battles and {len(test_importer.data)} test battles.")
 	print(f"Exported {len(summary.build_summary())} Pokémon to {output_path}")

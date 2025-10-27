@@ -1,4 +1,7 @@
 pandas
 numpy
 tqdm
-sklearn
+scikit-learn
+matplotlib
+seaborn
+beautifulsoup4
