@@ -38,9 +38,7 @@ class BattleFeatureExtractor:
             self._active_battle_id = battle.get("battle_id")
 
             # Get the last documented hp for each players pokemons
-            battle_info_p1, battle_info_p2 = self.get_battle_info(
-                battle.get("battle_timeline", []), battle.get("p1_team_details", [])
-            )
+            battle_info_p1, battle_info_p2 = self.get_battle_info(battle.get("battle_timeline", []))
 
             # Create dictionaries with only the pokemons that are alive (hp is not 0)
             alive_pokemon_p1= {pokemon: hp for pokemon, hp in battle_info_p1['pokemon_hp'].items() if hp != 0}
@@ -50,7 +48,6 @@ class BattleFeatureExtractor:
             p1_team = battle.get("p1_team_details", [])
             if p1_team:
 
-                p1_type_compatability = self.calculate_type_compatibility(alive_pokemon_p1, alive_pokemon_p2)
                 # features['p1_mean_hp'] = np.mean([p.get('base_hp', 0) for p in p1_team])
                 # features['p1_mean_spe'] = np.mean([p.get('base_spe', 0) for p in p1_team])
                 # features['p1_mean_atk'] = np.mean([p.get('base_atk', 0) for p in p1_team])
@@ -59,17 +56,14 @@ class BattleFeatureExtractor:
                 features['p1_dead_pokemons'] = self.count_dead_pokemons(battle_info_p1['pokemon_hp'])
                 features['p1_hp_loss'] = self.calculate_hp_loss(battle_info_p1['pokemon_hp'])
                 features['p1_avg_status'] = battle_info_p1['status_count'] / 30 # Divide by the total number of rounds
-                features['p1_type_compatibility'] = p1_type_compatability
+                features['p1_type_compatibility'] = self.calculate_type_compatibility(battle_info_p1['pokemon_hp'], battle_info_p2['pokemon_hp'])
                 features['p1_positive_boosts'] = battle_info_p1['positive_boosts']
                 features['p1_negative_boosts'] = battle_info_p1['negative_boosts']
-                # Difference between type compatability between beginning of game and after 30 rounds
-                features['p1_compatibility_diff'] = self.calculate_type_compatibility(battle_info_p1['pokemon_hp'], battle_info_p2['pokemon_hp']) - p1_type_compatability
 
             # --- Player 2 Lead Features ---
             p2_lead = battle.get("p2_lead_details")
             if p2_lead:
                 # Player 2's lead Pokémon's stats
-                p2_type_compatability = self.calculate_type_compatibility(alive_pokemon_p2, alive_pokemon_p1)
                 # features['p2_lead_hp'] = p2_lead.get('base_hp', 0)
                 # features['p2_lead_spe'] = p2_lead.get('base_spe', 0)
                 # features['p2_lead_atk'] = p2_lead.get('base_atk', 0)
@@ -78,13 +72,10 @@ class BattleFeatureExtractor:
                 features['p2_dead_pokemons'] = self.count_dead_pokemons(battle_info_p2['pokemon_hp'])
                 features['p2_hp_loss'] = self.calculate_hp_loss(battle_info_p2['pokemon_hp'])
                 features['p2_avg_status'] = battle_info_p2['status_count'] / 30 # Divide by the total number of rounds
-                features['p2_type_compatibility'] = p2_type_compatability
+                features['p2_type_compatibility'] = self.calculate_type_compatibility(battle_info_p2['pokemon_hp'], battle_info_p1['pokemon_hp'])
                 features['p2_positive_boosts'] = battle_info_p2['positive_boosts']
                 features['p2_negative_boosts'] = battle_info_p2['negative_boosts']
-                # Difference between type compatability between beginning of game and after 30 rounds
-                features['p2_compatibility_diff'] = self.calculate_type_compatibility(battle_info_p2['pokemon_hp'], battle_info_p1['pokemon_hp']) - p2_type_compatability
-
-
+               
             # We also need the ID and the target variable (if it exists)
             features["battle_id"] = battle.get("battle_id")
             if "player_won" in battle:
@@ -245,4 +236,4 @@ class BattleFeatureExtractor:
 
     @staticmethod
     def _data_path(filename: str) -> Path:
-        return Path(__file__).resolve().parents[1] / "data" / filename
+        return Path(__file__).resolve().parents[1] / "visualization" / filename

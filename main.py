@@ -102,8 +102,8 @@ if __name__ == "__main__":
     battle_file_name = (
         "./visualization/battle_htmls/json/Gen1OU-2020-04-19-eightylewis-nsh526625.json"
     )
-    predict_single_battle(model, feature_names, battle_file_name)
+    #predict_single_battle(model, feature_names, battle_file_name)
 
     # Run this part if you want to let the model predict the outcomes for the
     # test dataset, create a submission csv file and save it to the 'results' directory
-    # test_logistic_regression_model(model, features)
+    test_logistic_regression_model(model, feature_names)
