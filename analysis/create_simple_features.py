@@ -49,10 +49,18 @@ class BattleFeatureExtractor:
                 # features['p1_mean_atk'] = np.mean([p.get('base_atk', 0) for p in p1_team])
                 # features['p1_mean_def'] = np.mean([p.get('base_def', 0) for p in p1_team])
 
-                features['p1_dead_pokemons'] = self.count_dead_pokemons(battle_info_p1['pokemon_hp'])
-                features['p1_hp_loss'] = self.calculate_hp_loss(battle_info_p1['pokemon_hp'])
-                features['p1_avg_status'] = battle_info_p1['status_count'] / 30 # Divide by the total number of rounds
-                features['p1_type_compatibility'] = self.calculate_type_compatibility(battle_info_p1['pokemon_hp'], battle_info_p2['pokemon_hp'])
+                features["p1_dead_pokemons"] = self.count_dead_pokemons(
+                    battle_info_p1["pokemon_hp"]
+                )
+                features["p1_hp_loss"] = self.calculate_hp_loss(
+                    battle_info_p1["pokemon_hp"]
+                )
+                features["p1_avg_status"] = (
+                    battle_info_p1["status_count"] / 30
+                )  # Divide by the total number of rounds
+                features["p1_type_compatibility"] = self.calculate_type_compatibility(
+                    battle_info_p1["pokemon_hp"], battle_info_p2["pokemon_hp"]
+                )
                 # features['p1_positive_boosts'] = battle_info_p1['positive_boosts']
                 # features['p1_negative_boosts'] = battle_info_p1['negative_boosts']
 
@@ -65,10 +73,18 @@ class BattleFeatureExtractor:
                 # features['p2_lead_atk'] = p2_lead.get('base_atk', 0)
                 # features['p2_lead_def'] = p2_lead.get('base_def', 0)
 
-                features['p2_dead_pokemons'] = self.count_dead_pokemons(battle_info_p2['pokemon_hp'])
-                features['p2_hp_loss'] = self.calculate_hp_loss(battle_info_p2['pokemon_hp'])
-                features['p2_avg_status'] = battle_info_p2['status_count'] / 30 # Divide by the total number of rounds
-                features['p2_type_compatibility'] = self.calculate_type_compatibility(battle_info_p2['pokemon_hp'], battle_info_p1['pokemon_hp'])
+                features["p2_dead_pokemons"] = self.count_dead_pokemons(
+                    battle_info_p2["pokemon_hp"]
+                )
+                features["p2_hp_loss"] = self.calculate_hp_loss(
+                    battle_info_p2["pokemon_hp"]
+                )
+                features["p2_avg_status"] = (
+                    battle_info_p2["status_count"] / 30
+                )  # Divide by the total number of rounds
+                features["p2_type_compatibility"] = self.calculate_type_compatibility(
+                    battle_info_p2["pokemon_hp"], battle_info_p1["pokemon_hp"]
+                )
                 # features['p2_positive_boosts'] = battle_info_p2['positive_boosts']
                 # features['p2_negative_boosts'] = battle_info_p2['negative_boosts']
                
@@ -91,18 +107,6 @@ class BattleFeatureExtractor:
 
         battle_info_p1 = {'pokemon_hp': {}, 'status_count': 0, 'positive_boosts' : 0, 'negative_boosts' : 0}
         battle_info_p2 = {'pokemon_hp': {}, 'status_count': 0, 'positive_boosts' : 0, 'negative_boosts' : 0}
-
-        # In order to create a complete baseline for all known pokemons involved, every pokemon is added with full hp at the 
-        # start of the battle. This way, we do not miss p1's pokemon that do not get summoned during the first 30 turns.
-        roster_map = self._load_team_rosters()
-        if self._active_battle_id is None or self._active_battle_id not in roster_map:
-            return []
-        entry = roster_map[self._active_battle_id]
-        for pokemon_name in entry['p1_team']:
-            battle_info_p1['pokemon_hp'][pokemon_name] = 1.0
-
-        for pokemon_name in entry['p2_team']:
-            battle_info_p2['pokemon_hp'][pokemon_name] = 1.0
    
         # Add additional health and status information from battle turns
         for turn in battle_timeline:
