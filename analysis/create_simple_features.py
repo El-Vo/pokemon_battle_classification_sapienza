@@ -40,10 +40,6 @@ class BattleFeatureExtractor:
             # Get the last documented hp for each players pokemons
             battle_info_p1, battle_info_p2 = self.get_battle_info(battle.get("battle_timeline", []))
 
-            # Create dictionaries with only the pokemons that are alive (hp is not 0)
-            alive_pokemon_p1= {pokemon: hp for pokemon, hp in battle_info_p1['pokemon_hp'].items() if hp != 0}
-            alive_pokemon_p2= {pokemon: hp for pokemon, hp in battle_info_p2['pokemon_hp'].items() if hp != 0}
-
             # --- Player 1 Team Features ---
             p1_team = battle.get("p1_team_details", [])
             if p1_team:
@@ -57,8 +53,8 @@ class BattleFeatureExtractor:
                 features['p1_hp_loss'] = self.calculate_hp_loss(battle_info_p1['pokemon_hp'])
                 features['p1_avg_status'] = battle_info_p1['status_count'] / 30 # Divide by the total number of rounds
                 features['p1_type_compatibility'] = self.calculate_type_compatibility(battle_info_p1['pokemon_hp'], battle_info_p2['pokemon_hp'])
-                features['p1_positive_boosts'] = battle_info_p1['positive_boosts']
-                features['p1_negative_boosts'] = battle_info_p1['negative_boosts']
+                # features['p1_positive_boosts'] = battle_info_p1['positive_boosts']
+                # features['p1_negative_boosts'] = battle_info_p1['negative_boosts']
 
             # --- Player 2 Lead Features ---
             p2_lead = battle.get("p2_lead_details")
@@ -73,8 +69,8 @@ class BattleFeatureExtractor:
                 features['p2_hp_loss'] = self.calculate_hp_loss(battle_info_p2['pokemon_hp'])
                 features['p2_avg_status'] = battle_info_p2['status_count'] / 30 # Divide by the total number of rounds
                 features['p2_type_compatibility'] = self.calculate_type_compatibility(battle_info_p2['pokemon_hp'], battle_info_p1['pokemon_hp'])
-                features['p2_positive_boosts'] = battle_info_p2['positive_boosts']
-                features['p2_negative_boosts'] = battle_info_p2['negative_boosts']
+                # features['p2_positive_boosts'] = battle_info_p2['positive_boosts']
+                # features['p2_negative_boosts'] = battle_info_p2['negative_boosts']
                
             # We also need the ID and the target variable (if it exists)
             features["battle_id"] = battle.get("battle_id")
@@ -236,4 +232,4 @@ class BattleFeatureExtractor:
 
     @staticmethod
     def _data_path(filename: str) -> Path:
-        return Path(__file__).resolve().parents[1] / "visualization" / filename
+        return Path(__file__).resolve().parents[1] / "data" / filename
