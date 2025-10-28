@@ -38,9 +38,7 @@ class BattleFeatureExtractor:
             self._active_battle_id = battle.get("battle_id")
 
             # Get the last documented hp for each players pokemons
-            battle_info_p1, battle_info_p2 = self.get_battle_info(
-                battle.get("battle_timeline", []), battle.get("p1_team_details", [])
-            )
+            battle_info_p1, battle_info_p2 = self.get_battle_info(battle.get("battle_timeline", []))
 
             # --- Player 1 Team Features ---
             p1_team = battle.get("p1_team_details", [])
@@ -63,12 +61,13 @@ class BattleFeatureExtractor:
                 features["p1_type_compatibility"] = self.calculate_type_compatibility(
                     battle_info_p1["pokemon_hp"], battle_info_p2["pokemon_hp"]
                 )
+                # features['p1_positive_boosts'] = battle_info_p1['positive_boosts']
+                # features['p1_negative_boosts'] = battle_info_p1['negative_boosts']
 
             # --- Player 2 Lead Features ---
             p2_lead = battle.get("p2_lead_details")
             if p2_lead:
                 # Player 2's lead Pokémon's stats
-
                 # features['p2_lead_hp'] = p2_lead.get('base_hp', 0)
                 # features['p2_lead_spe'] = p2_lead.get('base_spe', 0)
                 # features['p2_lead_atk'] = p2_lead.get('base_atk', 0)
@@ -86,7 +85,9 @@ class BattleFeatureExtractor:
                 features["p2_type_compatibility"] = self.calculate_type_compatibility(
                     battle_info_p2["pokemon_hp"], battle_info_p1["pokemon_hp"]
                 )
-
+                # features['p2_positive_boosts'] = battle_info_p2['positive_boosts']
+                # features['p2_negative_boosts'] = battle_info_p2['negative_boosts']
+               
             # We also need the ID and the target variable (if it exists)
             features["battle_id"] = battle.get("battle_id")
             if "player_won" in battle:
@@ -104,15 +105,17 @@ class BattleFeatureExtractor:
             A tuple with two dictionaries with each pokemons hp and the total number of rounds with a status.
         """
 
-        battle_info_p1 = {"pokemon_hp": {}, "status_count": 0}
-        battle_info_p2 = {"pokemon_hp": {}, "status_count": 0}
-
+        battle_info_p1 = {'pokemon_hp': {}, 'status_count': 0, 'positive_boosts' : 0, 'negative_boosts' : 0}
+        battle_info_p2 = {'pokemon_hp': {}, 'status_count': 0, 'positive_boosts' : 0, 'negative_boosts' : 0}
+   
         # Add additional health and status information from battle turns
         for turn in battle_timeline:
             for player_key in ["p1_pokemon_state", "p2_pokemon_state"]:
                 pokemon_state = turn.get(player_key, {})
-                pokemon_name = pokemon_state.get("name")
-                current_hp = pokemon_state.get("hp_pct")
+                pokemon_name = pokemon_state.get('name')
+                current_hp = pokemon_state.get('hp_pct')
+                boost_dict = pokemon_state.get('boosts') # Boosts can be values between +6 and -6
+                
 
                 # Get the name of the dictonary to store the information based on which player it is
                 dict_name = (
@@ -120,7 +123,14 @@ class BattleFeatureExtractor:
                     if player_key == "p1_pokemon_state"
                     else battle_info_p2
                 )
-                dict_name["pokemon_hp"][pokemon_name] = current_hp
+                dict_name['pokemon_hp'][pokemon_name] = current_hp
+
+                for value in boost_dict.values():
+                    if value > 0:
+                        dict_name['positive_boosts']+= value
+                    elif value < 0:
+                        # The boost is just a negative value to show that it is a bad boost
+                        dict_name['negative_boosts']+= -1*value 
 
                 if pokemon_state.get("status") in NEGATIVE_STATUS:
                     dict_name["status_count"] += 1
