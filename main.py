@@ -38,6 +38,7 @@ def train_logistic_regression_model(
 
     return model
 
+
 def train_stacking_model(
     train_dataframe: DataFrame, train_feature_names: list, log_results: bool = False
 ) -> StackingClassifier:
@@ -103,19 +104,21 @@ def predict_single_battle(
 if __name__ == "__main__":
     [train_df, feature_names] = create_training_features()
 
-    feature_correlation = FeatureCorrelationAnalyzer(train_df, feature_names)
+    """feature_correlation = FeatureCorrelationAnalyzer(train_df, feature_names)
     feature_correlation.compute_correlation()
-    print(feature_correlation.top_correlated_pairs(0))
+    print(feature_correlation.top_correlated_pairs(0)) """
 
-    #model = train_logistic_regression_model(train_df, feature_names)
+    # model = train_logistic_regression_model(train_df, feature_names)
     model = train_stacking_model(train_df, feature_names)
 
     # Run this part if you want to test the predictions of the model against a match you can watch live
     # You can watch the match live in your browser if you open the html file under the directory below:
-    # battle_file_name = (
-    #    "./visualization/battle_htmls/json/Gen1OU-2020-04-19-eightylewis-nsh526625.json"
-    # )
-    # predict_single_battle(model.named_steps["logisticregression"], feature_names, battle_file_name)
+    """ battle_file_name = (
+        "./visualization/battle_htmls/json/Gen1OU-2020-04-19-eightylewis-nsh526625.json"
+    )
+    predict_single_battle(
+        model.named_steps["logisticregression"], feature_names, battle_file_name
+    ) """
 
     # Run this part if you want to let the model predict the outcomes for the
     # test dataset, create a submission csv file and save it to the 'results' directory

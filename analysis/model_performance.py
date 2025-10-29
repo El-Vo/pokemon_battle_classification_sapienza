@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 from sklearn.base import ClassifierMixin
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+from sklearn.pipeline import Pipeline
 
 
 @dataclass
@@ -27,18 +28,22 @@ class ModelPerformanceReport:
         parts = [f"Accuracy: {self.accuracy:.4f}"]
 
         if not self.coefficients.empty:
-            parts.extend([
-                "Coefficients:",
-                _format_coefficients_table(self.coefficients),
-                _significance_legend(),
-            ])
+            parts.extend(
+                [
+                    "Coefficients:",
+                    _format_coefficients_table(self.coefficients),
+                    _significance_legend(),
+                ]
+            )
 
-        parts.extend([
-            "Confusion Matrix:",
-            self.confusion_matrix.to_string(),
-            "Classification Report:",
-            self.classification_report,
-        ])
+        parts.extend(
+            [
+                "Confusion Matrix:",
+                self.confusion_matrix.to_string(),
+                "Classification Report:",
+                self.classification_report,
+            ]
+        )
         return "\n\n".join(parts)
 
     def print(self, *, top_k: int = 10) -> None:
@@ -59,7 +64,7 @@ def summarize_model_performance(
         feature_names = list(X.columns)
 
     predictions = model.predict(X)
-    accuracy = accuracy_score(y, predictions)
+    accuracy = float(accuracy_score(y, predictions))
 
     labels = list(label_names) if label_names is not None else sorted(set(y))
 
@@ -81,8 +86,15 @@ def summarize_model_performance(
     )
 
 
-def _extract_feature_weights(model: ClassifierMixin, feature_names: Sequence[str]) -> pd.DataFrame:
-    coef = getattr(model, "coef_", None)
+def _extract_feature_weights(
+    model: ClassifierMixin, feature_names: Sequence[str]
+) -> pd.DataFrame:
+    estimator, transformer = _unwrap_linear_components(model)
+
+    if estimator is None:
+        return pd.DataFrame({"feature": feature_names})
+
+    coef = getattr(estimator, "coef_", None)
     if coef is None:
         return pd.DataFrame({"feature": feature_names})
 
@@ -90,9 +102,13 @@ def _extract_feature_weights(model: ClassifierMixin, feature_names: Sequence[str
     if coef_array.ndim == 1:
         coef_array = coef_array.reshape(1, -1)
 
+    resolved_feature_names = _resolve_feature_names(
+        transformer, feature_names, coef_array.shape[1]
+    )
+
     abs_importance = np.mean(np.abs(coef_array), axis=0)
     data = {
-        "feature": feature_names,
+        "feature": resolved_feature_names,
         "mean_coefficient": coef_array.mean(axis=0),
         "abs_importance": abs_importance,
     }
@@ -110,19 +126,39 @@ def _summarize_coefficients(
     y: Sequence,
     feature_names: Sequence[str],
 ) -> pd.DataFrame:
-    if not hasattr(model, "coef_") or not hasattr(model, "intercept_"):
+    estimator, transformer = _unwrap_linear_components(model)
+    if estimator is None:
         return pd.DataFrame()
 
-    coef_array = np.asarray(model.coef_)
+    if not hasattr(estimator, "coef_") or not hasattr(estimator, "intercept_"):
+        return pd.DataFrame()
+
+    coef_attr = getattr(estimator, "coef_", None)
+    if coef_attr is None:
+        return pd.DataFrame()
+    coef_array = np.asarray(coef_attr)
     if coef_array.ndim != 2 or coef_array.shape[0] != 1:
         # Currently only support binary logistic regression output
         return pd.DataFrame()
 
-    intercept = np.asarray(model.intercept_).ravel()
+    intercept_attr = getattr(estimator, "intercept_", None)
+    if intercept_attr is None:
+        return pd.DataFrame()
+    intercept = np.asarray(intercept_attr).ravel()
     if intercept.size != 1:
         return pd.DataFrame()
 
-    X_matrix = np.asarray(X, dtype=float)
+    X_matrix = _transform_design_matrix(X, transformer)
+    if X_matrix is None:
+        return pd.DataFrame()
+
+    if X_matrix.shape[1] != coef_array.shape[1]:
+        return pd.DataFrame()
+
+    resolved_feature_names = _resolve_feature_names(
+        transformer, feature_names, coef_array.shape[1]
+    )
+
     n_samples = X_matrix.shape[0]
     if n_samples == 0:
         return pd.DataFrame()
@@ -147,7 +183,7 @@ def _summarize_coefficients(
     z_values = coefficients / np.where(standard_errors == 0, np.nan, standard_errors)
 
     p_values = 2 * (1 - _normal_cdf(np.abs(z_values)))
-    terms = ["(Intercept)"] + list(feature_names)
+    terms = ["(Intercept)"] + list(resolved_feature_names)
     significance = [_significance_code(p) for p in p_values]
 
     summary_df = pd.DataFrame(
@@ -161,6 +197,82 @@ def _summarize_coefficients(
         }
     )
     return summary_df
+
+
+def _unwrap_linear_components(
+    model: ClassifierMixin,
+) -> tuple[Optional[ClassifierMixin], Optional[Pipeline]]:
+    if hasattr(model, "best_estimator_"):
+        best_estimator = getattr(model, "best_estimator_")
+        if best_estimator is None:
+            return None, None
+        return _unwrap_linear_components(best_estimator)
+
+    if isinstance(model, Pipeline):
+        if not model.steps:
+            return None, None
+        final_estimator = model.steps[-1][1]
+        feature_pipeline = model[:-1] if len(model.steps) > 1 else None
+        return final_estimator, feature_pipeline
+
+    if hasattr(model, "coef_"):
+        return model, None
+
+    return None, None
+
+
+def _transform_design_matrix(
+    X: pd.DataFrame, transformer: Optional[Pipeline]
+) -> Optional[np.ndarray]:
+    if transformer is None:
+        return np.asarray(X, dtype=float)
+
+    try:
+        transformed = transformer.transform(X)
+    except Exception:
+        return None
+
+    return np.asarray(transformed, dtype=float)
+
+
+def _resolve_feature_names(
+    transformer: Optional[Pipeline],
+    feature_names: Sequence[str],
+    expected_length: int,
+) -> list[str]:
+    candidates: list[str] | None = None
+
+    if transformer is not None and hasattr(transformer, "get_feature_names_out"):
+        try:
+            candidates = list(transformer.get_feature_names_out(feature_names))
+        except TypeError:
+            try:
+                candidates = list(transformer.get_feature_names_out())
+            except Exception:
+                candidates = None
+        except Exception:
+            candidates = None
+
+    if candidates is None and isinstance(transformer, Pipeline) and transformer.steps:
+        last_step = transformer.steps[-1][1]
+        if hasattr(last_step, "get_feature_names_out"):
+            try:
+                candidates = list(last_step.get_feature_names_out(feature_names))
+            except TypeError:
+                try:
+                    candidates = list(last_step.get_feature_names_out())
+                except Exception:
+                    candidates = None
+            except Exception:
+                candidates = None
+
+    if candidates is not None and len(candidates) == expected_length:
+        return candidates
+
+    if len(feature_names) == expected_length:
+        return list(feature_names)
+
+    return [f"feature_{idx}" for idx in range(expected_length)]
 
 
 def _normal_cdf(value: np.ndarray) -> np.ndarray:
@@ -199,7 +311,7 @@ def _format_coefficients_table(coefficients: pd.DataFrame) -> str:
             "": df["significance"].values,
         }
     )
-    table.index = df["term"].values
+    table.index = pd.Index(df["term"].values)
 
     return table.to_string()
 

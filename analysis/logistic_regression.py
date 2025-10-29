@@ -67,9 +67,9 @@ class RunLogisticRegression:
             grid_logreg.best_estimator_
         )  # Use the best model with the best combination of parameters
 
-        self._log_gridsearch_res(
+        """ self._log_gridsearch_res(
             cv_results_df, grid_logreg
-        )  # Display the result of the gridcvsearch
+        )  """  # Display the result of the gridcvsearch
 
         if log_result:
             self._log_training_accuracy(X_train, y_train)
