@@ -63,7 +63,15 @@ class BattleFeatureExtractor:
                 )
                 # features['p1_positive_boosts'] = battle_info_p1['positive_boosts']
                 # features['p1_negative_boosts'] = battle_info_p1['negative_boosts']
-
+                # --- New Feature: Successful Explosion ---
+                features["successful_explosion"] = 0
+                for turn in battle.get("battle_timeline", []):
+                    p1_move = turn.get("p1_move_details", {})
+                    p2_state = turn.get("p2_pokemon_state", {})
+                    if p1_move and p1_move.get("name", "").lower() == "explosion" and p2_state.get("hp_pct", 1.0) == 0.0:
+                            features["successful_explosion"] = 1
+                    break
+            
             # --- Player 2 Lead Features ---
             p2_lead = battle.get("p2_lead_details")
             if p2_lead:
@@ -88,6 +96,20 @@ class BattleFeatureExtractor:
                 # features['p2_positive_boosts'] = battle_info_p2['positive_boosts']
                 # features['p2_negative_boosts'] = battle_info_p2['negative_boosts']
                
+            # --- Successful Explosion Features ---
+            features["successful_explosion"] = 0
+            features["successful_explosion_p2"] = 0
+            for turn in battle.get("battle_timeline", []):
+                p1_move = turn.get("p1_move_details", {})
+                p2_state = turn.get("p2_pokemon_state", {})
+                if p1_move and p1_move.get("name", "").lower() == "explosion" and p2_state.get("hp_pct", 1.0) == 0.0:
+                    features["successful_explosion"] = 1
+                p2_move = turn.get("p2_move_details", {})
+                p1_state = turn.get("p1_pokemon_state", {})
+                if p2_move and p2_move.get("name", "").lower() == "explosion" and p1_state.get("hp_pct", 1.0) == 0.0:
+                    features["successful_explosion_p2"] = 1
+                break
+            
             # We also need the ID and the target variable (if it exists)
             features["battle_id"] = battle.get("battle_id")
             if "player_won" in battle:
