@@ -63,7 +63,15 @@ class BattleFeatureExtractor:
                 )
                 # features['p1_positive_boosts'] = battle_info_p1['positive_boosts']
                 # features['p1_negative_boosts'] = battle_info_p1['negative_boosts']
-
+                # --- New Feature: Successful Explosion ---
+                features["successful_explosion"] = 0
+                for turn in battle.get("battle_timeline", []):
+                    p1_move = turn.get("p1_move_details", {})
+                    p2_state = turn.get("p2_pokemon_state", {})
+                    if p1_move and p1_move.get("name", "").lower() == "explosion" and p2_state.get("hp_pct", 1.0) == 0.0:
+                            features["successful_explosion"] = 1
+                    break
+            
             # --- Player 2 Lead Features ---
             p2_lead = battle.get("p2_lead_details")
             if p2_lead:
@@ -88,6 +96,113 @@ class BattleFeatureExtractor:
                 # features['p2_positive_boosts'] = battle_info_p2['positive_boosts']
                 # features['p2_negative_boosts'] = battle_info_p2['negative_boosts']
                
+            # --- Battle Special Moves & Effectiveness Features ---
+            features["successful_explosion"] = 0
+            features["p1_forfeited"] = 0
+            features["p2_forfeited"] = 0
+            features["p1_timeout"] = 0
+            features["p2_timeout"] = 0
+            
+            # Check for forfeit and timeout messages in battle timeline
+            for turn in battle.get("battle_timeline", []):
+                message = turn.get("message", "").lower()
+                if "forfeited" in message:
+                    if message.startswith("p1"):
+                        features["p1_forfeited"] = 1
+                    elif message.startswith("p2"):
+                        features["p2_forfeited"] = 1
+                # Check for timeouts (when player runs out of time)
+                if "inactive" in message:
+                    if "p1" in message and "0 seconds left" in message:
+                        features["p1_timeout"] = 1
+                    elif "p2" in message and "0 seconds left" in message:
+                        features["p2_timeout"] = 1
+            features["successful_explosion_p2"] = 0
+            features["high_damage_moves_p1"] = 0
+            features["high_damage_moves_p2"] = 0
+
+            # New: counts of attack effectiveness
+            features["attacks_2x_p1"] = 0
+            features["attacks_0_5x_p1"] = 0
+            features["attacks_0x_p1"] = 0
+            features["attacks_2x_p2"] = 0
+            features["attacks_0_5x_p2"] = 0
+            features["attacks_0x_p2"] = 0
+
+            prev_p2_hp = 1.0  # Initial HP is always 100%
+            prev_p1_hp = 1.0
+
+            # Local cache of type lookup to avoid repeated loads
+            type_lookup = self._load_pokemon_types()
+
+            for turn in battle.get("battle_timeline", []):
+                # Check for successful explosions
+                p1_move = turn.get("p1_move_details", {}) 
+                p2_state = turn.get("p2_pokemon_state", {})
+                if p1_move and p1_move.get("name", "").lower() == "explosion" and p2_state.get("hp_pct", 1.0) == 0.0:
+                    features["successful_explosion"] = 1
+                p2_move = turn.get("p2_move_details", {})
+                p1_state = turn.get("p1_pokemon_state", {})
+                if p2_move and p2_move.get("name", "").lower() == "explosion" and p1_state.get("hp_pct", 1.0) == 0.0:
+                    features["successful_explosion_p2"] = 1
+
+                # Check for high damage moves
+                curr_p2_hp = p2_state.get("hp_pct", prev_p2_hp)
+                curr_p1_hp = p1_state.get("hp_pct", prev_p1_hp)
+
+                # Calculate damage dealt as percentage of current HP
+                if p1_move:
+                    damage_dealt = prev_p2_hp - curr_p2_hp
+                    if damage_dealt > 0.66:  # More than 66% damage
+                        features["high_damage_moves_p1"] += 1
+
+                if p2_move:
+                    damage_dealt = prev_p1_hp - curr_p1_hp
+                    if damage_dealt > 0.66:  # More than 66% damage
+                        features["high_damage_moves_p2"] += 1
+
+                # --- New: attack-type effectiveness counting ---
+                # Player 1 attacking moves
+                try:
+                    if p1_move:
+                        move_type = p1_move.get("type")
+                        defender_name = p2_state.get("name")
+                        if move_type and defender_name:
+                            defender_types = type_lookup.get(defender_name.lower())
+                            if defender_types:
+                                multiplier = self._attack_calc.calculate(move_type, defender_types)
+                                if abs(multiplier - 2.0) < 1e-8:
+                                    features["attacks_2x_p1"] += 1
+                                elif abs(multiplier - 0.5) < 1e-8:
+                                    features["attacks_0_5x_p1"] += 1
+                                elif abs(multiplier - 0.0) < 1e-8:
+                                    features["attacks_0x_p1"] += 1
+                except Exception:
+                    # If types are unknown or calculation fails, skip counting for this move
+                    pass
+
+                # Player 2 attacking moves
+                try:
+                    if p2_move:
+                        move_type = p2_move.get("type")
+                        defender_name = p1_state.get("name")
+                        if move_type and defender_name:
+                            defender_types = type_lookup.get(defender_name.lower())
+                            if defender_types:
+                                multiplier = self._attack_calc.calculate(move_type, defender_types)
+                                if abs(multiplier - 2.0) < 1e-8:
+                                    features["attacks_2x_p2"] += 1
+                                elif abs(multiplier - 0.5) < 1e-8:
+                                    features["attacks_0_5x_p2"] += 1
+                                elif abs(multiplier - 0.0) < 1e-8:
+                                    features["attacks_0x_p2"] += 1
+                except Exception:
+                    pass
+
+                # Update previous HP values for next turn
+                prev_p2_hp = curr_p2_hp
+                prev_p1_hp = curr_p1_hp
+            
             # We also need the ID and the target variable (if it exists)
             features["battle_id"] = battle.get("battle_id")
             if "player_won" in battle:
