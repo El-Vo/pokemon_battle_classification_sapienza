@@ -1,7 +1,9 @@
 from pandas import DataFrame
+from sklearn.ensemble import RandomForestClassifier, StackingClassifier
 from prepare_data.import_source import ImportSource
 from analysis.create_simple_features import BattleFeatureExtractor
 from analysis.logistic_regression import RunLogisticRegression
+from analysis.stacking_model import RunStackingModel
 from analysis.test_model import TestModel
 from analysis.feature_correlation import FeatureCorrelationAnalyzer
 from sklearn.linear_model import LogisticRegression as SklearnLogisticRegression
@@ -34,6 +36,16 @@ def train_logistic_regression_model(
     print("\nTraining performance summary:\n")
     performance_report.print(top_k=10)
 
+    return model
+
+def train_stacking_model(
+    train_dataframe: DataFrame, train_feature_names: list, log_results: bool = False
+) -> StackingClassifier:
+    trainer = RunStackingModel(train_dataframe, train_feature_names)
+    model = trainer.train_stacking_model(log_results)
+    performance_report = trainer.evaluate_training_performance()
+    print("\nTraining performance summary:\n")
+    performance_report.print(top_k=10)
     return model
 
 
@@ -95,7 +107,8 @@ if __name__ == "__main__":
     feature_correlation.compute_correlation()
     print(feature_correlation.top_correlated_pairs(0))
 
-    model = train_logistic_regression_model(train_df, feature_names)
+    #model = train_logistic_regression_model(train_df, feature_names)
+    model = train_stacking_model(train_df, feature_names)
 
     # Run this part if you want to test the predictions of the model against a match you can watch live
     # You can watch the match live in your browser if you open the html file under the directory below:
