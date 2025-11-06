@@ -1,16 +1,19 @@
 import pandas as pd
 from sklearn.discriminant_analysis import StandardScaler
 from sklearn.metrics import accuracy_score
-from sklearn.datasets import make_moons
-from sklearn.ensemble import BaggingClassifier, RandomForestClassifier, StackingClassifier
+from sklearn.ensemble import (
+    RandomForestClassifier, 
+    StackingClassifier, 
+    GradientBoostingClassifier
+)
 from sklearn.linear_model import LogisticRegression as SklearnLogisticRegression
-from typing import Optional
+import numpy as np
+from typing import Optional, Dict, List, Tuple
 
 from sklearn.model_selection import GridSearchCV, train_test_split
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.pipeline import make_pipeline
-from sklearn.svm import SVC
-from sklearn.tree import DecisionTreeClassifier
+
 
 from analysis.accuracy_results_logger import AccuracyResultsLogger
 from analysis.model_performance import ModelPerformanceReport, summarize_model_performance
@@ -36,28 +39,52 @@ class RunStackingModel:
             X, y, test_size=0.3, random_state=42
         )
 
+        # Calculate correlations between base models
+        #print("\nAnalyzing base model correlations...")
+        #self.calculate_model_correlations(X_train, y_train)
+        
         # --- Base learners ---
         estimators = [
-            ('lr', self.train_logistic_regression_model(X_train, y_train)),
+            #('lr', self.train_logistic_regression_model(X_train, y_train)),
             ('rf', self.train_random_forest_model(X_train, y_train)),
-            ('knn', self.train_knn_model(X_train, y_train))
+            ('knn', self.train_knn_model(X_train, y_train)),
+            ('gb', self.train_gradient_boosting_model(X_train, y_train))
         ]
 
         # --- Meta-learner ---
-        final_estimator = SklearnLogisticRegression()  # combines base model predictions
+        meta_learner = make_pipeline(
+            StandardScaler(),
+            SklearnLogisticRegression(
+                C=1.0,
+                penalty='l2',
+                solver='lbfgs',
+                max_iter=1000,
+                random_state=42
+            )
+        )
 
         # --- Define Stacking ensemble ---
         stacking_clf = StackingClassifier(
             estimators=estimators,
-            final_estimator=final_estimator,
+            final_estimator=meta_learner,
             cv=5  # cross-validation for base model predictions
         )
 
         # --- Train and evaluate ---
+        print("\n=== Stacking Classifier Training ===")
         stacking_clf.fit(X_train, y_train)
-        y_pred = stacking_clf.predict(X_test)
-
-        print(f"Stacking Classifier Accuracy: {accuracy_score(y_test, y_pred):.3f}")
+        
+        # Get training accuracy
+        y_train_pred = stacking_clf.predict(X_train)
+        train_acc = accuracy_score(y_train, y_train_pred)
+        
+        # Get test accuracy
+        y_test_pred = stacking_clf.predict(X_test)
+        test_acc = accuracy_score(y_test, y_test_pred)
+        
+        print(f"Stacking Classifier Training Accuracy: {train_acc:.3f}")
+        print(f"Stacking Classifier Test Accuracy: {test_acc:.3f}")
+        
         self.model = stacking_clf
         if log_result:
             self._log_training_accuracy(X_train, y_train)
@@ -83,7 +110,7 @@ class RunStackingModel:
         grid_rf = GridSearchCV(
             estimator=pipeline,
             param_grid=param_grid,
-            scoring='accuracy',
+            scoring='roc_auc',
             n_jobs=-1,  # Use all available cores
             cv=5,
             refit=True,
@@ -91,6 +118,16 @@ class RunStackingModel:
         )
 
         grid_rf.fit(X_train, y_train)
+        
+        # Print the best parameters and scores
+        print("\n=== Random Forest Results ===")
+        print("Best Parameters:", grid_rf.best_params_)
+        print(f"Best Cross-Validation ROC-AUC: {grid_rf.best_score_:.3f}")
+        
+        # Get training and test accuracy
+        best_rf = grid_rf.best_estimator_
+        train_acc = accuracy_score(y_train, best_rf.predict(X_train))
+        print(f"Training Accuracy: {train_acc:.3f}")
         
         return grid_rf.best_estimator_
 
@@ -134,7 +171,59 @@ class RunStackingModel:
 
         grid_logreg.fit(X_train, y_train)
 
+        # Print the best parameters and scores
+        print("\n=== Logistic Regression Results ===")
+        print("Best Parameters:", grid_logreg.best_params_)
+        print(f"Best Cross-Validation ROC-AUC: {grid_logreg.best_score_:.3f}")
+        
+        # Get training and test accuracy
+        best_logreg = grid_logreg.best_estimator_
+        train_acc = accuracy_score(y_train, best_logreg.predict(X_train))
+        print(f"Training Accuracy: {train_acc:.3f}")
+        
         return grid_logreg.best_estimator_ # Use the best model with the best combination of parameters
+
+    def train_gradient_boosting_model(self, X_train, y_train) -> GradientBoostingClassifier:
+        """Train a Gradient Boosting model with hyperparameter tuning using GridSearchCV."""
+        # Define the parameter grid to search
+        param_grid = {
+            'gradientboostingclassifier__n_estimators': [100, 200, 300],
+            'gradientboostingclassifier__learning_rate': [0.01, 0.1, 0.3],
+            'gradientboostingclassifier__max_depth': [3, 4, 5],
+            'gradientboostingclassifier__min_samples_split': [2, 5],
+            'gradientboostingclassifier__subsample': [0.8, 0.9, 1.0]
+        }
+
+        # Create a pipeline with GradientBoosting
+        pipeline = make_pipeline(
+            StandardScaler(),
+            GradientBoostingClassifier(random_state=42)
+        )
+
+        # Use GridSearchCV to find the best combination of parameters
+        grid_gb = GridSearchCV(
+            estimator=pipeline,
+            param_grid=param_grid,
+            scoring='roc_auc',
+            n_jobs=-1,  # Use all available cores
+            cv=5,
+            refit=True,
+            return_train_score=True
+        )
+
+        grid_gb.fit(X_train, y_train)
+        
+        # Print the best parameters and scores
+        print("\n=== Gradient Boosting Results ===")
+        print("Best Parameters:", grid_gb.best_params_)
+        print(f"Best Cross-Validation ROC-AUC: {grid_gb.best_score_:.3f}")
+        
+        # Get training accuracy
+        best_gb = grid_gb.best_estimator_
+        train_acc = accuracy_score(y_train, best_gb.predict(X_train))
+        print(f"Training Accuracy: {train_acc:.3f}")
+        
+        return grid_gb.best_estimator_
 
     def train_knn_model(self, X_train, y_train) -> KNeighborsClassifier:
         """Train a K-Nearest Neighbors model with hyperparameter tuning using GridSearchCV."""
@@ -156,7 +245,7 @@ class RunStackingModel:
         grid_knn = GridSearchCV(
             estimator=pipeline,
             param_grid=param_grid,
-            scoring='accuracy',
+            scoring='roc_auc',
             n_jobs=-1,  # Use all available cores
             cv=5,
             refit=True,
@@ -165,9 +254,15 @@ class RunStackingModel:
 
         grid_knn.fit(X_train, y_train)
         
-        # Print the best parameters and score
-        print("Best KNN Parameters:", grid_knn.best_params_)
-        print("Best CrossValidation Score:", grid_knn.best_score_)
+        # Print the best parameters and scores
+        print("\n=== K-Nearest Neighbors Results ===")
+        print("Best Parameters:", grid_knn.best_params_)
+        print(f"Best Cross-Validation ROC-AUC: {grid_knn.best_score_:.3f}")
+        
+        # Get training and test accuracy
+        best_knn = grid_knn.best_estimator_
+        train_acc = accuracy_score(y_train, best_knn.predict(X_train))
+        print(f"Training Accuracy: {train_acc:.3f}")
         
         return grid_knn.best_estimator_
     
@@ -177,6 +272,76 @@ class RunStackingModel:
         acc = accuracy_score(y_train, train_preds)
         self._results_logger.append_result(accuracy=acc, features=self.train_feature_names)
         print(f"Training accuracy appended to {self._results_logger.csv_path}")
+
+    def calculate_model_correlations(self, X: pd.DataFrame, y: pd.Series) -> None:
+        """
+        Calculate and print the correlation between base model predictions.
+        This helps identify if models are too similar or provide unique perspectives.
+        
+        Args:
+            X: Feature matrix
+            y: True labels
+        """
+        print("\n=== Base Model Prediction Correlations ===")
+        
+        # Create and fit individual models
+        models = {
+            #'LogisticRegression': self.train_logistic_regression_model(X, y),
+            'RandomForest': self.train_random_forest_model(X, y),
+            'KNN': self.train_knn_model(X, y),
+            'GradientBoosting': self.train_gradient_boosting_model(X, y)
+        }
+        
+        # Get predictions from each model
+        predictions = {}
+        for name, model in models.items():
+            pred = model.predict_proba(X)[:, 1]  # Get probability of class 1
+            predictions[name] = pred
+        
+        # Calculate correlations between model predictions
+        model_names = list(predictions.keys())
+        correlation_matrix = np.zeros((len(model_names), len(model_names)))
+        
+        for i, name1 in enumerate(model_names):
+            for j, name2 in enumerate(model_names):
+                correlation = np.corrcoef(predictions[name1], predictions[name2])[0, 1]
+                correlation_matrix[i, j] = correlation
+        
+        # Print correlation matrix
+        print("\nPrediction Correlation Matrix:")
+        print("=" * 60)
+        print(f"{'':20}", end="")
+        for name in model_names:
+            print(f"{name:>15}", end="")
+        print("\n" + "-" * 60)
+        
+        for i, name1 in enumerate(model_names):
+            print(f"{name1:20}", end="")
+            for j in range(len(model_names)):
+                print(f"{correlation_matrix[i,j]:15.3f}", end="")
+            print()
+        
+        # Print interpretation
+        print("\nInterpretation:")
+        print("- Correlation close to 1: Models make very similar predictions")
+        print("- Correlation close to 0: Models make independent predictions")
+        print("- Lower correlations between models are better for stacking")
+        
+        # Print recommendations
+        high_correlation_threshold = 0.8
+        high_correlations = []
+        
+        for i, name1 in enumerate(model_names):
+            for j, name2 in enumerate(model_names[i+1:], i+1):
+                if correlation_matrix[i,j] > high_correlation_threshold:
+                    high_correlations.append((name1, name2, correlation_matrix[i,j]))
+        
+        if high_correlations:
+            print("\nRecommendations:")
+            print("The following model pairs have high correlation (>0.8) and might be redundant:")
+            for name1, name2, corr in high_correlations:
+                print(f"- {name1} and {name2}: {corr:.3f}")
+            print("Consider replacing one of each highly correlated pair with a different model type.")
 
     def evaluate_training_performance(self) -> ModelPerformanceReport:
         if self.model is None:
