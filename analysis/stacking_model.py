@@ -6,6 +6,7 @@ from sklearn.ensemble import (
     StackingClassifier, 
     GradientBoostingClassifier
 )
+from sklearn.svm import SVC
 from sklearn.linear_model import LogisticRegression as SklearnLogisticRegression
 import numpy as np
 from typing import Optional, Dict, List, Tuple
@@ -40,15 +41,16 @@ class RunStackingModel:
         )
 
         # Calculate correlations between base models
-        #print("\nAnalyzing base model correlations...")
-        #self.calculate_model_correlations(X_train, y_train)
+        # print("\nAnalyzing base model correlations...")
+        # self.calculate_model_correlations(X_train, y_train)
         
         # --- Base learners ---
         estimators = [
             #('lr', self.train_logistic_regression_model(X_train, y_train)),
             ('rf', self.train_random_forest_model(X_train, y_train)),
             ('knn', self.train_knn_model(X_train, y_train)),
-            ('gb', self.train_gradient_boosting_model(X_train, y_train))
+            ('gb', self.train_gradient_boosting_model(X_train, y_train)),
+            ('svm', self.train_svm_model(X_train, y_train))
         ]
 
         # --- Meta-learner ---
@@ -85,13 +87,16 @@ class RunStackingModel:
         """Train a Random Forest model with hyperparameter tuning using GridSearchCV."""
         # Define the parameter grid to search
         param_grid = {
-            'randomforestclassifier__max_depth': [10, 20, 30, None]
+            'randomforestclassifier__max_depth': [8, 15, None],
+            'randomforestclassifier__min_samples_leaf': [2],
+            'randomforestclassifier__class_weight': ['balanced'],
+            'randomforestclassifier__n_estimators': [200]
         }
 
         # Create a pipeline with RandomForest
         pipeline = make_pipeline(
             StandardScaler(),
-            RandomForestClassifier(random_state=42, min_samples_split=2, ccp_alpha=0.01, n_estimators=300)
+            RandomForestClassifier(random_state=42)
         )
 
         # Use GridSearchCV to find the best combination of parameters
@@ -175,9 +180,9 @@ class RunStackingModel:
         """Train a Gradient Boosting model with hyperparameter tuning using GridSearchCV."""
         # Define the parameter grid to search
         param_grid = {
-            'gradientboostingclassifier__n_estimators': [100, 200, 300],
-            'gradientboostingclassifier__learning_rate': [0.01, 0.1, 0.3],
-            'gradientboostingclassifier__max_depth': [3, 4, 5]
+            'gradientboostingclassifier__n_estimators': [100],
+            'gradientboostingclassifier__learning_rate': [0.1],
+            'gradientboostingclassifier__max_depth': [3, 5]
         }
 
         # Create a pipeline with GradientBoosting
@@ -215,14 +220,15 @@ class RunStackingModel:
         """Train a K-Nearest Neighbors model with hyperparameter tuning using GridSearchCV."""
         # Define the parameter grid to search
         param_grid = {
-            'kneighborsclassifier__n_neighbors': [10,15,20,25,30],
-            'kneighborsclassifier__p': [1, 2]  # p=1 for manhattan, p=2 for euclidean
+            'kneighborsclassifier__n_neighbors': [5, 9, 15],
+            'kneighborsclassifier__weights': ['distance'],
+            'kneighborsclassifier__metric': ['minkowski']
         }
 
         # Create a pipeline with KNN
         pipeline = make_pipeline(
             StandardScaler(),  # Scale features for better distance calculations
-            KNeighborsClassifier(weights='uniform')
+            KNeighborsClassifier()
         )
 
         # Use GridSearchCV to find the best combination of parameters
@@ -270,10 +276,10 @@ class RunStackingModel:
         
         # Create and fit individual models
         models = {
-            #'LogisticRegression': self.train_logistic_regression_model(X, y),
             'RandomForest': self.train_random_forest_model(X, y),
             'KNN': self.train_knn_model(X, y),
-            'GradientBoosting': self.train_gradient_boosting_model(X, y)
+            'GradientBoosting': self.train_gradient_boosting_model(X, y),
+            'SVM': self.train_svm_model(X, y)
         }
         
         # Get predictions from each model
@@ -326,6 +332,47 @@ class RunStackingModel:
             for name1, name2, corr in high_correlations:
                 print(f"- {name1} and {name2}: {corr:.3f}")
             print("Consider replacing one of each highly correlated pair with a different model type.")
+
+    def train_svm_model(self, X_train, y_train) -> SVC:
+        """Train an SVM model with hyperparameter tuning using GridSearchCV."""
+        # Define the parameter grid to search
+        param_grid = {
+            'svc__C': [1.0],
+            'svc__kernel': ['rbf'],
+            'svc__gamma': ['scale'],
+            'svc__class_weight': ['balanced']
+        }
+
+        # Create a pipeline with SVM
+        pipeline = make_pipeline(
+            StandardScaler(),
+            SVC(random_state=42, probability=True)  # probability=True needed for voting classifier
+        )
+
+        # Use GridSearchCV to find the best combination of parameters
+        grid_svm = GridSearchCV(
+            estimator=pipeline,
+            param_grid=param_grid,
+            scoring='roc_auc',
+            n_jobs=-1,
+            cv=5,
+            refit=True,
+            return_train_score=True
+        )
+
+        grid_svm.fit(X_train, y_train)
+        
+        # Print the best parameters and scores
+        print("\n=== Support Vector Machine Results ===")
+        print("Best Parameters:", grid_svm.best_params_)
+        print(f"Best Cross-Validation ROC-AUC: {grid_svm.best_score_:.3f}")
+        
+        # Get training accuracy
+        best_svm = grid_svm.best_estimator_
+        train_acc = accuracy_score(y_train, best_svm.predict(X_train))
+        print(f"Training Accuracy: {train_acc:.3f}")
+        
+        return grid_svm.best_estimator_
 
     def evaluate_training_performance(self) -> ModelPerformanceReport:
         if self.model is None:
