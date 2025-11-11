@@ -5,3 +5,4 @@ data/*
 .vscode/settings.json
 .DS_Store
 tools/__pycache__/*
+visualization/__pycache__/*
