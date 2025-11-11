@@ -54,12 +54,23 @@ class RunStackingModel:
         ]
 
         # --- Meta-learner ---
-        meta_learner = self.train_logistic_regression_model(X_train, y_train)
+        #meta_learner = self.train_logistic_regression_model(X_train, y_train)
+        meta_learner = make_pipeline(
+            StandardScaler(),
+            SklearnLogisticRegression(
+                random_state=42,
+                max_iter=1000,
+                C=0.1,
+                penalty='l1',
+                solver='liblinear'
+            )
+        )
 
         # --- Define Stacking ensemble ---
         stacking_clf = StackingClassifier(
             estimators=estimators,
             final_estimator=meta_learner,
+            passthrough=True,
             cv=5  # cross-validation for base model predictions
         )
 
@@ -87,10 +98,13 @@ class RunStackingModel:
         """Train a Random Forest model with hyperparameter tuning using GridSearchCV."""
         # Define the parameter grid to search
         param_grid = {
-            'randomforestclassifier__max_depth': [8, 15, None],
-            'randomforestclassifier__min_samples_leaf': [2],
-            'randomforestclassifier__class_weight': ['balanced'],
-            'randomforestclassifier__n_estimators': [200]
+            'randomforestclassifier__n_estimators': [100, 200, 300],
+            'randomforestclassifier__max_depth': [8],
+            'randomforestclassifier__min_samples_split': [10],
+            'randomforestclassifier__min_samples_leaf': [4],
+            'randomforestclassifier__max_features': ['sqrt', 'log2', 0.5],
+            'randomforestclassifier__ccp_alpha': [0.0, 0.01],
+            'randomforestclassifier__class_weight': ['balanced']
         }
 
         # Create a pipeline with RandomForest
@@ -180,10 +194,11 @@ class RunStackingModel:
         """Train a Gradient Boosting model with hyperparameter tuning using GridSearchCV."""
         # Define the parameter grid to search
         param_grid = {
-            'gradientboostingclassifier__n_estimators': [100],
-            'gradientboostingclassifier__learning_rate': [0.1],
-            'gradientboostingclassifier__max_depth': [3, 5]
-        }
+            'gradientboostingclassifier__n_estimators': [100, 200, 300],
+            'gradientboostingclassifier__learning_rate': [0.01, 0.05, 0.1],
+            'gradientboostingclassifier__max_depth': [3, 5, 7],
+            'gradientboostingclassifier__subsample': [0.7, 0.8, 1.0]
+            }
 
         # Create a pipeline with GradientBoosting
         pipeline = make_pipeline(
@@ -220,9 +235,11 @@ class RunStackingModel:
         """Train a K-Nearest Neighbors model with hyperparameter tuning using GridSearchCV."""
         # Define the parameter grid to search
         param_grid = {
-            'kneighborsclassifier__n_neighbors': [5, 9, 15],
-            'kneighborsclassifier__weights': ['distance'],
-            'kneighborsclassifier__metric': ['minkowski']
+            'kneighborsclassifier__n_neighbors': [5, 10, 15, 20],
+            'kneighborsclassifier__weights': ['uniform', 'distance'],
+            'kneighborsclassifier__metric': ['minkowski', 'euclidean', 'manhattan'],
+            'kneighborsclassifier__p': [1, 2],
+            'kneighborsclassifier__leaf_size': [20, 30, 40]
         }
 
         # Create a pipeline with KNN
