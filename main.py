@@ -6,7 +6,6 @@ from analysis.logistic_regression import RunLogisticRegression
 from analysis.stacking_model import RunStackingModel
 from analysis.test_model import TestModel
 from analysis.feature_correlation import FeatureCorrelationAnalyzer
-from sklearn.linear_model import LogisticRegression as SklearnLogisticRegression
 from sklearn.pipeline import Pipeline
 
 
@@ -51,9 +50,7 @@ def train_stacking_model(
     return model
 
 
-def test_logistic_regression_model(
-    model: SklearnLogisticRegression, features: list
-) -> None:
+def test_logistic_regression_model(model: Pipeline, features: list) -> None:
     test_data_importer = ImportSource()
     test_data_importer.load_jsonl("./data/test.jsonl")
     test_data_extractor = BattleFeatureExtractor(test_data_importer.data)
@@ -63,7 +60,7 @@ def test_logistic_regression_model(
 
 
 def predict_single_battle(
-    model: SklearnLogisticRegression,
+    model: Pipeline,
     features: list,
     battles_df: DataFrame,
     random_state: int | None = None,
@@ -102,18 +99,38 @@ def predict_single_battle(
         print(f"{feature}: {value}")
 
     # Feature importance (model coefficients)
-    coefficients = model.coef_[0]
-    feature_importance = list(zip(features, coefficients, feature_values))
+    logistic_step = None
+    if hasattr(model, "named_steps"):
+        logistic_step = model.named_steps.get("logisticregression")
+    elif hasattr(model, "steps"):
+        for _, step in model.steps:
+            if hasattr(step, "coef_"):
+                logistic_step = step
+                break
 
-    # Actual contribution of each feature to the prediction
-    print("\n=== ACTUAL CONTRIBUTION TO PREDICTION (Top 10) ===")
-    contributions = [
-        (feature, coef * value, value) for feature, coef, value in feature_importance
-    ]
-    contributions_sorted = sorted(contributions, key=lambda x: abs(x[1]), reverse=True)
+    if logistic_step is not None and hasattr(logistic_step, "coef_"):
+        coefficients = logistic_step.coef_[0]
+        feature_importance = list(zip(features, coefficients, feature_values))
 
-    for feature, contribution, value in contributions_sorted[:10]:
-        print(f"  {feature:40s} | Contrib: {contribution:+.4f} | Value: {value:6.2f}")
+        # Actual contribution of each feature to the prediction
+        print("\n=== ACTUAL CONTRIBUTION TO PREDICTION (Top 10) ===")
+        contributions = [
+            (feature, coef * value, value)
+            for feature, coef, value in feature_importance
+        ]
+        contributions_sorted = sorted(
+            contributions, key=lambda x: abs(x[1]), reverse=True
+        )
+
+        for feature, contribution, value in contributions_sorted[:10]:
+            print(
+                f"  {feature:40s} | Contrib: {contribution:+.4f} | Value: {value:6.2f}"
+            )
+    else:
+        print(
+            "\n=== ACTUAL CONTRIBUTION TO PREDICTION ===\n"
+            "Coefficient-based contributions unavailable for this model."
+        )
 
 
 if __name__ == "__main__":
@@ -133,17 +150,13 @@ if __name__ == "__main__":
     live_battle_importer = ImportSource()
     live_battle_importer.load_json(battle_file_name)
     live_battle_df = BattleFeatureExtractor(live_battle_importer.data).process()
-    predict_single_battle(
-        model.named_steps["logisticregression"], feature_names, live_battle_df
-    ) """
+    predict_single_battle(model, feature_names, live_battle_df) """
 
     # Run this block to analyse a random battle from the test set instead
     test_data_importer = ImportSource()
     test_data_importer.load_jsonl("./data/test.jsonl")
     test_df = BattleFeatureExtractor(test_data_importer.data).process()
-    predict_single_battle(
-        model.named_steps["logisticregression"], feature_names, test_df
-    )
+    predict_single_battle(model, feature_names, test_df)
 
     # Run this part if you want to let the model predict the outcomes for the
     # test dataset, create a submission csv file and save it to the 'results' directory
