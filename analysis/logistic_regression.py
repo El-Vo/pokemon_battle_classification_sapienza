@@ -5,7 +5,7 @@ from sklearn.metrics import accuracy_score
 from typing import Optional
 
 from sklearn.model_selection import GridSearchCV
-from sklearn.pipeline import make_pipeline
+from sklearn.pipeline import make_pipeline, Pipeline
 
 from analysis.accuracy_results_logger import AccuracyResultsLogger
 from analysis.model_performance import (
@@ -19,10 +19,10 @@ class RunLogisticRegression:
     def __init__(self, train_df: pd.DataFrame, feature_names):
         self.train_df = train_df
         self.train_feature_names = feature_names
-        self.model: Optional[SklearnLogisticRegression] = None
+        self.model: Optional[Pipeline] = None
         self._results_logger = AccuracyResultsLogger()
 
-    def train_model(self, log_result: bool = False) -> SklearnLogisticRegression:
+    def train_model(self, log_result: bool = False) -> Pipeline:
         # Define our features (X) and target (y)
         X_train = self.train_df[self.train_feature_names]
         y_train = self.train_df["player_won"]
