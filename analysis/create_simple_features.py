@@ -45,8 +45,8 @@ class BattleFeatureExtractor:
             if p1_team:
 
                 #features['p1_mean_hp'] = np.mean([p.get('base_hp', 0) for p in p1_team])
-                features['p1_mean_spe'] = np.mean([p.get('base_spe', 0) for p in p1_team])
-                features['p1_mean_atk'] = np.mean([p.get('base_atk', 0) for p in p1_team])
+                #features['p1_mean_spe'] = np.mean([p.get('base_spe', 0) for p in p1_team])
+                #features['p1_mean_atk'] = np.mean([p.get('base_atk', 0) for p in p1_team])
                 #features['p1_mean_def'] = np.mean([p.get('base_def', 0) for p in p1_team])
 
                 #features["p1_dead_pokemons"] = self.count_dead_pokemons(
@@ -63,7 +63,7 @@ class BattleFeatureExtractor:
                 )
                 #features['p1_positive_boosts'] = battle_info_p1['positive_boosts']
                 #features['p1_negative_boosts'] = battle_info_p1['negative_boosts']
-                features['p1_boosts'] = battle_info_p1['positive_boosts'] - battle_info_p1['negative_boosts']
+                #features['p1_boosts'] = battle_info_p1['positive_boosts'] - battle_info_p1['negative_boosts']
                
                 # --- New Feature: Successful Explosion ---
                 features["successful_explosion"] = 0
@@ -79,8 +79,8 @@ class BattleFeatureExtractor:
             if p2_lead:
                 # Player 2's lead Pokémon's stats
                 #features['p2_lead_hp'] = p2_lead.get('base_hp', 0)
-                features['p2_lead_spe'] = p2_lead.get('base_spe', 0)
-                features['p2_lead_atk'] = p2_lead.get('base_atk', 0)
+                #features['p2_lead_spe'] = p2_lead.get('base_spe', 0)
+                #features['p2_lead_atk'] = p2_lead.get('base_atk', 0)
                 #features['p2_lead_def'] = p2_lead.get('base_def', 0)
 
                 #features["p2_dead_pokemons"] = self.count_dead_pokemons(
@@ -97,7 +97,7 @@ class BattleFeatureExtractor:
                 )
                 #features['p2_positive_boosts'] = battle_info_p2['positive_boosts']
                 #features['p2_negative_boosts'] = battle_info_p2['negative_boosts']
-                features['p2_boosts'] = battle_info_p2['positive_boosts'] - battle_info_p2['negative_boosts']
+                #features['p2_boosts'] = battle_info_p2['positive_boosts'] - battle_info_p2['negative_boosts']
                
             # --- Battle Special Moves & Effectiveness Features ---
             features["successful_explosion"] = 0

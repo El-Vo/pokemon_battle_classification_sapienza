@@ -9,7 +9,7 @@ from sklearn.ensemble import (
 from sklearn.svm import SVC
 from sklearn.linear_model import LogisticRegression as SklearnLogisticRegression
 import numpy as np
-from typing import Optional, Dict, List, Tuple
+from typing import Optional
 
 from sklearn.model_selection import GridSearchCV, train_test_split
 from sklearn.neighbors import KNeighborsClassifier
@@ -39,57 +39,58 @@ class RunStackingModel:
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=0.3, random_state=42
         )
-
-        # Calculate correlations between base models
-        # print("\nAnalyzing base model correlations...")
-        # self.calculate_model_correlations(X_train, y_train)
         
         # --- Base learners ---
         estimators = [
-            #('lr', self.train_logistic_regression_model(X_train, y_train)),
             ('rf', self.train_random_forest_model(X_train, y_train)),
             ('knn', self.train_knn_model(X_train, y_train)),
             ('gb', self.train_gradient_boosting_model(X_train, y_train)),
             ('svm', self.train_svm_model(X_train, y_train))
         ]
 
-        # --- Meta-learner ---
-        #meta_learner = self.train_logistic_regression_model(X_train, y_train)
-        meta_learner = make_pipeline(
-            StandardScaler(),
-            SklearnLogisticRegression(
-                random_state=42,
-                max_iter=1000,
-                C=0.1,
-                penalty='l1',
-                solver='liblinear'
-            )
-        )
+        # Calculate correlations between base models
+        print("\nAnalyzing base model correlations...")
+        self.calculate_model_correlations(X_train, y_train, estimators)
 
-        # --- Define Stacking ensemble ---
+        # --- Stacking classifier ---
         stacking_clf = StackingClassifier(
             estimators=estimators,
-            final_estimator=meta_learner,
+            final_estimator=SklearnLogisticRegression(max_iter=10000, random_state=42),
             passthrough=True,
-            cv=5  # cross-validation for base model predictions
+            cv=5
         )
 
-        # --- Train and evaluate ---
-        print("\n=== Stacking Classifier Training ===")
-        stacking_clf.fit(X_train, y_train)
+        # Define two separate parameter grids for different solvers
+        param_grid = [
+            # Grid 1: L1 penalty with liblinear solver
+            {
+                'final_estimator__C': [0.01, 0.1, 1, 10],
+                'final_estimator__penalty': ['l1'],
+                'final_estimator__solver': ['liblinear']
+            },
+            # Grid 2: L2 penalty with lbfgs solver
+            {
+                'final_estimator__C': [0.01, 0.1, 1, 10],
+                'final_estimator__penalty': ['l2'],
+                'final_estimator__solver': ['lbfgs']
+            }
+        ]
+
+        grid = GridSearchCV(stacking_clf, param_grid=param_grid, cv=5, scoring='roc_auc')
+        grid.fit(X_train, y_train)
         
         # Get training accuracy
-        y_train_pred = stacking_clf.predict(X_train)
+        y_train_pred = grid.predict(X_train)
         train_acc = accuracy_score(y_train, y_train_pred)
         
         # Get test accuracy
-        y_test_pred = stacking_clf.predict(X_test)
+        y_test_pred = grid.predict(X_test)
         test_acc = accuracy_score(y_test, y_test_pred)
         
         print(f"Stacking Classifier Training Accuracy: {train_acc:.3f}")
         print(f"Stacking Classifier Test Accuracy: {test_acc:.3f}")
         
-        self.model = stacking_clf
+        self.model = grid
         if log_result:
             self._log_training_accuracy(X_train, y_train)
         return self.model
@@ -99,12 +100,11 @@ class RunStackingModel:
         # Define the parameter grid to search
         param_grid = {
             'randomforestclassifier__n_estimators': [100, 200, 300],
-            'randomforestclassifier__max_depth': [8],
-            'randomforestclassifier__min_samples_split': [10],
-            'randomforestclassifier__min_samples_leaf': [4],
+            'randomforestclassifier__max_depth': [6, 8, 10],
+            'randomforestclassifier__min_samples_split': [5, 10, 20],
+            'randomforestclassifier__min_samples_leaf': [2, 4, 6],
             'randomforestclassifier__max_features': ['sqrt', 'log2', 0.5],
-            'randomforestclassifier__ccp_alpha': [0.0, 0.01],
-            'randomforestclassifier__class_weight': ['balanced']
+            'randomforestclassifier__ccp_alpha': [0.0, 0.005, 0.01]
         }
 
         # Create a pipeline with RandomForest
@@ -175,21 +175,9 @@ class RunStackingModel:
             refit=True,      
             return_train_score=True
         )
-
-        grid_logreg.fit(X_train, y_train)
-
-        # Print the best parameters and scores
-        print("\n=== Logistic Regression Results ===")
-        print("Best Parameters:", grid_logreg.best_params_)
-        print(f"Best Cross-Validation ROC-AUC: {grid_logreg.best_score_:.3f}")
-        
-        # Get training and test accuracy
-        best_logreg = grid_logreg.best_estimator_
-        train_acc = accuracy_score(y_train, best_logreg.predict(X_train))
-        print(f"Training Accuracy: {train_acc:.3f}")
         
         return grid_logreg.best_estimator_ # Use the best model with the best combination of parameters
-
+    
     def train_gradient_boosting_model(self, X_train, y_train) -> GradientBoostingClassifier:
         """Train a Gradient Boosting model with hyperparameter tuning using GridSearchCV."""
         # Define the parameter grid to search
@@ -272,93 +260,17 @@ class RunStackingModel:
         print(f"Training Accuracy: {train_acc:.3f}")
         
         return grid_knn.best_estimator_
-    
-    def _log_training_accuracy(self, X_train, y_train) -> None:
-        """Log the training accuracy to a CSV file."""
-        train_preds = self.model.predict(X_train)
-        acc = accuracy_score(y_train, train_preds)
-        self._results_logger.append_result(accuracy=acc, features=self.train_feature_names)
-        print(f"Training accuracy appended to {self._results_logger.csv_path}")
-
-    def calculate_model_correlations(self, X: pd.DataFrame, y: pd.Series) -> None:
-        """
-        Calculate and print the correlation between base model predictions.
-        This helps identify if models are too similar or provide unique perspectives.
-        
-        Args:
-            X: Feature matrix
-            y: True labels
-        """
-        print("\n=== Base Model Prediction Correlations ===")
-        
-        # Create and fit individual models
-        models = {
-            'RandomForest': self.train_random_forest_model(X, y),
-            'KNN': self.train_knn_model(X, y),
-            'GradientBoosting': self.train_gradient_boosting_model(X, y),
-            'SVM': self.train_svm_model(X, y)
-        }
-        
-        # Get predictions from each model
-        predictions = {}
-        for name, model in models.items():
-            pred = model.predict_proba(X)[:, 1]  # Get probability of class 1
-            predictions[name] = pred
-        
-        # Calculate correlations between model predictions
-        model_names = list(predictions.keys())
-        correlation_matrix = np.zeros((len(model_names), len(model_names)))
-        
-        for i, name1 in enumerate(model_names):
-            for j, name2 in enumerate(model_names):
-                correlation = np.corrcoef(predictions[name1], predictions[name2])[0, 1]
-                correlation_matrix[i, j] = correlation
-        
-        # Print correlation matrix
-        print("\nPrediction Correlation Matrix:")
-        print("=" * 60)
-        print(f"{'':20}", end="")
-        for name in model_names:
-            print(f"{name:>15}", end="")
-        print("\n" + "-" * 60)
-        
-        for i, name1 in enumerate(model_names):
-            print(f"{name1:20}", end="")
-            for j in range(len(model_names)):
-                print(f"{correlation_matrix[i,j]:15.3f}", end="")
-            print()
-        
-        # Print interpretation
-        print("\nInterpretation:")
-        print("- Correlation close to 1: Models make very similar predictions")
-        print("- Correlation close to 0: Models make independent predictions")
-        print("- Lower correlations between models are better for stacking")
-        
-        # Print recommendations
-        high_correlation_threshold = 0.8
-        high_correlations = []
-        
-        for i, name1 in enumerate(model_names):
-            for j, name2 in enumerate(model_names[i+1:], i+1):
-                if correlation_matrix[i,j] > high_correlation_threshold:
-                    high_correlations.append((name1, name2, correlation_matrix[i,j]))
-        
-        if high_correlations:
-            print("\nRecommendations:")
-            print("The following model pairs have high correlation (>0.8) and might be redundant:")
-            for name1, name2, corr in high_correlations:
-                print(f"- {name1} and {name2}: {corr:.3f}")
-            print("Consider replacing one of each highly correlated pair with a different model type.")
 
     def train_svm_model(self, X_train, y_train) -> SVC:
         """Train an SVM model with hyperparameter tuning using GridSearchCV."""
         # Define the parameter grid to search
         param_grid = {
-            'svc__C': [1.0],
+            'svc__C': [0.1, 1, 10],
             'svc__kernel': ['rbf'],
-            'svc__gamma': ['scale'],
-            'svc__class_weight': ['balanced']
+            'svc__gamma': ['scale', 'auto'],
+            'svc__class_weight': [None, 'balanced']
         }
+
 
         # Create a pipeline with SVM
         pipeline = make_pipeline(
@@ -390,6 +302,50 @@ class RunStackingModel:
         print(f"Training Accuracy: {train_acc:.3f}")
         
         return grid_svm.best_estimator_
+    
+    def calculate_model_correlations(self, X: pd.DataFrame, y: pd.Series, models) -> None:
+        """
+        Calculate and print the correlation between base model predictions.
+        This helps identify if models are too similar or provide unique perspectives.
+        """
+        print("\n=== Base Model Prediction Correlations ===")
+        
+        # Get predictions from each model
+        predictions = {}
+        for name, model in models:
+            pred = model.predict_proba(X)[:, 1]  # Get probability of class 1
+            predictions[name] = pred
+        
+        # Calculate correlations between model predictions
+        model_names = list(predictions.keys())
+        correlation_matrix = np.zeros((len(model_names), len(model_names)))
+        
+        for i, name1 in enumerate(model_names):
+            for j, name2 in enumerate(model_names):
+                correlation = np.corrcoef(predictions[name1], predictions[name2])[0, 1]
+                correlation_matrix[i, j] = correlation
+        
+        # Print correlation matrix
+        print("\nPrediction Correlation Matrix:")
+        print("=" * 60)
+        print(f"{'':20}", end="")
+        for name in model_names:
+            print(f"{name:>15}", end="")
+        print("\n" + "-" * 60)
+        
+        for i, name1 in enumerate(model_names):
+            print(f"{name1:20}", end="")
+            for j in range(len(model_names)):
+                print(f"{correlation_matrix[i,j]:15.3f}", end="")
+            print()
+
+    
+    def _log_training_accuracy(self, X_train, y_train) -> None:
+        """Log the training accuracy to a CSV file."""
+        train_preds = self.model.predict(X_train)
+        acc = accuracy_score(y_train, train_preds)
+        self._results_logger.append_result(accuracy=acc, features=self.train_feature_names)
+        print(f"Training accuracy appended to {self._results_logger.csv_path}")
 
     def evaluate_training_performance(self) -> ModelPerformanceReport:
         if self.model is None:
