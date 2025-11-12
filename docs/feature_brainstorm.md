@@ -13,6 +13,7 @@
 - Count Pokemon not only with no hp but with low/critical hp
 - Not only count status effects but count rounds with negative status effects
 - If the battle takes less than 30 turns, a clear winner is found
+    - It turns out that there are no battles in the test/training dataset where players lose due to inactivity/forfeiting
 
 # Notes about the dataset:
 - Battles aren't necessarily documented from start to finish, "only" the first 30 rounds are documented

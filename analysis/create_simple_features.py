@@ -75,7 +75,7 @@ class BattleFeatureExtractor:
                 # features['p1_positive_boosts'] = battle_info_p1['positive_boosts']
                 # features['p1_negative_boosts'] = battle_info_p1['negative_boosts']
                 # --- New Feature: Successful Explosion ---
-                features["successful_explosion"] = 0
+                """ features["successful_explosion"] = 0
                 for turn in battle.get("battle_timeline", []):
                     p1_move = turn.get("p1_move_details", {})
                     p2_state = turn.get("p2_pokemon_state", {})
@@ -85,7 +85,7 @@ class BattleFeatureExtractor:
                         and p2_state.get("hp_pct", 1.0) == 0.0
                     ):
                         features["successful_explosion"] = 1
-                    break
+                    break """
 
             # --- Player 2 Lead Features ---
             p2_lead = battle.get("p2_lead_details")
@@ -118,29 +118,10 @@ class BattleFeatureExtractor:
                 # features['p2_negative_boosts'] = battle_info_p2['negative_boosts']
 
             # --- Battle Special Moves & Effectiveness Features ---
-            features["successful_explosion"] = 0
-            features["p1_forfeited"] = 0
-            features["p2_forfeited"] = 0
-            features["p1_timeout"] = 0
-            features["p2_timeout"] = 0
-
-            # Check for forfeit and timeout messages in battle timeline
-            for turn in battle.get("battle_timeline", []):
-                message = turn.get("message", "").lower()
-                if "forfeited" in message:
-                    if message.startswith("p1"):
-                        features["p1_forfeited"] = 1
-                    elif message.startswith("p2"):
-                        features["p2_forfeited"] = 1
-                # Check for timeouts (when player runs out of time)
-                if "inactive" in message:
-                    if "p1" in message and "0 seconds left" in message:
-                        features["p1_timeout"] = 1
-                    elif "p2" in message and "0 seconds left" in message:
-                        features["p2_timeout"] = 1
-            features["successful_explosion_p2"] = 0
+            """ features["successful_explosion"] = 0
+            features["successful_explosion_p2"] = 0 
             features["high_damage_moves_p1"] = 0
-            features["high_damage_moves_p2"] = 0
+            features["high_damage_moves_p2"] = 0 """
 
             # New: counts of attack effectiveness
             features["attacks_2x_p1"] = 0
@@ -160,26 +141,26 @@ class BattleFeatureExtractor:
                 # Check for successful explosions
                 p1_move = turn.get("p1_move_details", {})
                 p2_state = turn.get("p2_pokemon_state", {})
-                if (
+                p2_move = turn.get("p2_move_details", {})
+                p1_state = turn.get("p1_pokemon_state", {})
+                """ if (
                     p1_move
                     and p1_move.get("name", "").lower() == "explosion"
                     and p2_state.get("hp_pct", 1.0) == 0.0
                 ):
                     features["successful_explosion"] = 1
-                p2_move = turn.get("p2_move_details", {})
-                p1_state = turn.get("p1_pokemon_state", {})
                 if (
                     p2_move
                     and p2_move.get("name", "").lower() == "explosion"
                     and p1_state.get("hp_pct", 1.0) == 0.0
                 ):
-                    features["successful_explosion_p2"] = 1
+                    features["successful_explosion_p2"] = 1 """
 
                 # Check for high damage moves
                 curr_p2_hp = p2_state.get("hp_pct", prev_p2_hp)
                 curr_p1_hp = p1_state.get("hp_pct", prev_p1_hp)
 
-                # Calculate damage dealt as percentage of current HP
+                """ # Calculate damage dealt as percentage of current HP
                 if p1_move:
                     damage_dealt = prev_p2_hp - curr_p2_hp
                     if damage_dealt > 0.66:  # More than 66% damage
@@ -188,7 +169,7 @@ class BattleFeatureExtractor:
                 if p2_move:
                     damage_dealt = prev_p1_hp - curr_p1_hp
                     if damage_dealt > 0.66:  # More than 66% damage
-                        features["high_damage_moves_p2"] += 1
+                        features["high_damage_moves_p2"] += 1 """
 
                 # --- New: attack-type effectiveness counting ---
                 # Player 1 attacking moves
