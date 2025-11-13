@@ -12,13 +12,17 @@ from analysis.test_model import TestModel
 from analysis.feature_correlation import FeatureCorrelationAnalyzer
 
 
-def create_training_features() -> tuple[DataFrame, list]:
+def create_training_features(
+    selected_features: list[str],
+) -> tuple[DataFrame, list]:
     # Check if training data is available under data/train.jsonl
     train_data_importer = ImportSource()
     train_data_importer.load_jsonl("./data/train.jsonl")
     # train_data_importer.display_first_battle()
 
-    train_data_extractor = BattleFeatureExtractor(train_data_importer.data)
+    train_data_extractor = BattleFeatureExtractor(
+        train_data_importer.data, list(selected_features)
+    )
     train_df = train_data_extractor.process()
 
     # Exclude battle_id (because it has no informative value) and player_won (because this is the variable we want to predict) from training features
@@ -68,7 +72,9 @@ def train_stacking_model(
 def test_trained_model(model: Any, features: list) -> None:
     test_data_importer = ImportSource()
     test_data_importer.load_jsonl("./data/test.jsonl")
-    test_data_extractor = BattleFeatureExtractor(test_data_importer.data)
+    test_data_extractor = BattleFeatureExtractor(
+        test_data_importer.data, list(features)
+    )
     test_df = test_data_extractor.process()
     test = TestModel(model, test_df, features)
     test.test()
@@ -149,7 +155,22 @@ def predict_single_battle(
 
 
 if __name__ == "__main__":
-    [train_df, feature_names] = create_training_features()
+    configured_features = [
+        "p1_hp_loss",
+        "p1_avg_status",
+        "p1_type_compatibility",
+        "p2_hp_loss",
+        "p2_avg_status",
+        "p2_type_compatibility",
+        "attacks_2x_p1",
+        "attacks_0_5x_p1",
+        "attacks_0x_p1",
+        "attacks_2x_p2",
+        "attacks_0_5x_p2",
+        "attacks_0x_p2",
+    ]
+
+    [train_df, feature_names] = create_training_features(configured_features)
 
     feature_correlation = FeatureCorrelationAnalyzer(train_df, feature_names)
     feature_correlation.compute_correlation()
@@ -164,13 +185,17 @@ if __name__ == "__main__":
     )
     live_battle_importer = ImportSource()
     live_battle_importer.load_json(battle_file_name)
-    live_battle_df = BattleFeatureExtractor(live_battle_importer.data).process()
+    live_battle_df = BattleFeatureExtractor(
+        live_battle_importer.data, list(feature_names)
+    ).process()
     predict_single_battle(model, feature_names, live_battle_df) """
 
     # Run this block to analyse a random battle from the test set instead
     test_data_importer = ImportSource()
     test_data_importer.load_jsonl("./data/test.jsonl")
-    test_df = BattleFeatureExtractor(test_data_importer.data).process()
+    test_df = BattleFeatureExtractor(
+        test_data_importer.data, list(feature_names)
+    ).process()
     predict_single_battle(model, feature_names, test_df)
 
     # Run this part if you want to let the model predict the outcomes for the

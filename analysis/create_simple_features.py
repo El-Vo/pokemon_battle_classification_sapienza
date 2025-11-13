@@ -1,26 +1,88 @@
-from tqdm.auto import tqdm
 import json
+from collections import Counter
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
 import numpy as np
 import pandas as pd
-from pathlib import Path
-from collections import Counter
-from typing import Dict, List, Optional
+from tqdm.auto import tqdm
+
 from tools.calculate_attack_effectiveness import AttackEffectivenessCalculator
 
 NEGATIVE_STATUS = ["par", "brn", "frz", "slp", "psn", "tox"]
 
 
+@dataclass
+class BattleContext:
+    battle: Dict
+    battle_id: Optional[int]
+    timeline: List[Dict]
+    p1_team: List[Dict]
+    p2_team: List[Dict]
+    p1_lead: Optional[Dict]
+    p2_lead: Optional[Dict]
+    battle_info_p1: Dict
+    battle_info_p2: Dict
+    type_lookup: Dict[str, List[str]]
+    caches: Dict[str, Any] = field(default_factory=dict)
+
+
 class BattleFeatureExtractor:
     """Encapsulate feature extraction from battleJSONL data."""
 
-    def __init__(self, data: List[Dict]):
+    FEATURE_BUILDERS = {
+        "p1_mean_hp": "_feature_p1_mean_hp",
+        "p1_mean_spe": "_feature_p1_mean_spe",
+        "p1_mean_atk": "_feature_p1_mean_atk",
+        "p1_mean_def": "_feature_p1_mean_def",
+        "p1_dead_pokemons": "_feature_p1_dead_pokemons",
+        "p1_hp_loss": "_feature_p1_hp_loss",
+        "p1_total_damage": "_feature_p1_total_damage",
+        "p1_avg_status": "_feature_p1_avg_status",
+        "p1_type_compatibility": "_feature_p1_type_compatibility",
+        "p1_avg_team_winrate": "_feature_p1_avg_team_winrate",
+        "p1_positive_boosts": "_feature_p1_positive_boosts",
+        "p1_negative_boosts": "_feature_p1_negative_boosts",
+        "p2_lead_hp": "_feature_p2_lead_hp",
+        "p2_lead_spe": "_feature_p2_lead_spe",
+        "p2_lead_atk": "_feature_p2_lead_atk",
+        "p2_lead_def": "_feature_p2_lead_def",
+        "p2_dead_pokemons": "_feature_p2_dead_pokemons",
+        "p2_hp_loss": "_feature_p2_hp_loss",
+        "p2_total_damage": "_feature_p2_total_damage",
+        "p2_avg_status": "_feature_p2_avg_status",
+        "p2_type_compatibility": "_feature_p2_type_compatibility",
+        "p2_avg_team_winrate": "_feature_p2_avg_team_winrate",
+        "p2_positive_boosts": "_feature_p2_positive_boosts",
+        "p2_negative_boosts": "_feature_p2_negative_boosts",
+        "successful_explosion": "_feature_successful_explosion",
+        "successful_explosion_p2": "_feature_successful_explosion_p2",
+        "high_damage_moves_p1": "_feature_high_damage_moves_p1",
+        "high_damage_moves_p2": "_feature_high_damage_moves_p2",
+        "attacks_2x_p1": "_feature_attacks_2x_p1",
+        "attacks_0_5x_p1": "_feature_attacks_0_5x_p1",
+        "attacks_0x_p1": "_feature_attacks_0x_p1",
+        "attacks_2x_p2": "_feature_attacks_2x_p2",
+        "attacks_0_5x_p2": "_feature_attacks_0_5x_p2",
+        "attacks_0x_p2": "_feature_attacks_0x_p2",
+    }
+
+    HIGH_DAMAGE_THRESHOLD = 0.66
+
+    def __init__(self, data: List[Dict], enabled_features: List[str]):
         self.data = data
+        self.enabled_features = self._validate_features(enabled_features)
         self.data_df: Optional[pd.DataFrame] = None
         self._team_rosters: Optional[Dict[int, Dict[str, List[str]]]] = None
         self._pokemon_types: Optional[Dict[str, List[str]]] = None
         self._attack_calc = AttackEffectivenessCalculator()
         self._active_battle_id: Optional[int] = None
         self._pokemon_win_rates: Optional[Dict[str, float]] = None
+
+    @classmethod
+    def available_features(cls) -> List[str]:
+        return list(cls.FEATURE_BUILDERS.keys())
 
     def process(self) -> pd.DataFrame:
         """Compute the feature DataFrame once and cache the result."""
@@ -29,202 +91,326 @@ class BattleFeatureExtractor:
         return self.data_df
 
     def create_simple_features(self, data: List[Dict]) -> pd.DataFrame:
-        """
-        A feature extraction function.
-        Returns a pandas DataFrame with missing values filled as 0.
-        """
-        feature_list: List[Dict] = []
+        """Return a pandas DataFrame with the selected features for each battle."""
+
+        feature_rows: List[Dict[str, Any]] = []
         for battle in tqdm(data, desc="Extracting features"):
-            features: Dict = {}
+            context = self._build_context(battle)
+            row: Dict[str, Any] = {}
 
-            self._active_battle_id = battle.get("battle_id")
+            for feature_name in self.enabled_features:
+                builder_name = self.FEATURE_BUILDERS[feature_name]
+                builder = getattr(self, builder_name)
+                try:
+                    row[feature_name] = builder(context)
+                except Exception as exc:  # pragma: no cover - defensive guard
+                    raise RuntimeError(
+                        f"Failed to compute feature '{feature_name}' for battle "
+                        f"{context.battle_id}"
+                    ) from exc
 
-            # Get the last documented hp for each players pokemons
-            battle_info_p1, battle_info_p2 = self.get_battle_info(
-                battle.get("battle_timeline", [])
+            row["battle_id"] = context.battle_id
+            if "player_won" in battle:
+                row["player_won"] = int(battle["player_won"])
+
+            feature_rows.append(row)
+
+        return pd.DataFrame(feature_rows).fillna(0)
+
+    def _validate_features(self, enabled_features: List[str]) -> List[str]:
+        if not enabled_features:
+            raise ValueError("At least one feature must be provided.")
+
+        features = list(enabled_features)
+        seen = set()
+        validated: List[str] = []
+        for name in features:
+            if name not in self.FEATURE_BUILDERS:
+                available = ", ".join(sorted(self.FEATURE_BUILDERS))
+                raise ValueError(
+                    f"Unknown feature '{name}'. Available features: {available}"
+                )
+            if name not in seen:
+                validated.append(name)
+                seen.add(name)
+
+        return validated
+
+    def _build_context(self, battle: Dict) -> BattleContext:
+        battle_id = battle.get("battle_id")
+        timeline = battle.get("battle_timeline") or []
+        p1_team = battle.get("p1_team_details") or []
+        p2_team = battle.get("p2_team_details") or []
+        p1_lead = battle.get("p1_lead_details")
+        p2_lead = battle.get("p2_lead_details")
+        battle_info_p1, battle_info_p2 = self.get_battle_info(timeline)
+        type_lookup = self._load_pokemon_types()
+
+        self._active_battle_id = battle_id
+
+        return BattleContext(
+            battle=battle,
+            battle_id=battle_id,
+            timeline=timeline,
+            p1_team=p1_team,
+            p2_team=p2_team,
+            p1_lead=p1_lead,
+            p2_lead=p2_lead,
+            battle_info_p1=battle_info_p1,
+            battle_info_p2=battle_info_p2,
+            type_lookup=type_lookup,
+        )
+
+    def _compute_timeline_metrics(
+        self, context: BattleContext
+    ) -> Dict[str, Dict[str, int]]:
+        cached = context.caches.get("timeline_metrics")
+        if cached is not None:
+            return cached
+
+        attack_counts = {
+            "attacks_2x_p1": 0,
+            "attacks_0_5x_p1": 0,
+            "attacks_0x_p1": 0,
+            "attacks_2x_p2": 0,
+            "attacks_0_5x_p2": 0,
+            "attacks_0x_p2": 0,
+        }
+        explosion_flags = {"p1": 0, "p2": 0}
+        high_damage_counts = {"p1": 0, "p2": 0}
+
+        prev_p2_hp = 1.0
+        prev_p1_hp = 1.0
+
+        for turn in context.timeline:
+            p1_move = turn.get("p1_move_details") or {}
+            p2_move = turn.get("p2_move_details") or {}
+            p2_state = turn.get("p2_pokemon_state") or {}
+            p1_state = turn.get("p1_pokemon_state") or {}
+
+            if (p1_move.get("name") or "").lower() == "explosion" and p2_state.get(
+                "hp_pct"
+            ) == 0.0:
+                explosion_flags["p1"] = 1
+            if (p2_move.get("name") or "").lower() == "explosion" and p1_state.get(
+                "hp_pct"
+            ) == 0.0:
+                explosion_flags["p2"] = 1
+
+            curr_p2_hp = p2_state.get("hp_pct")
+            if curr_p2_hp is None:
+                curr_p2_hp = prev_p2_hp
+            curr_p1_hp = p1_state.get("hp_pct")
+            if curr_p1_hp is None:
+                curr_p1_hp = prev_p1_hp
+
+            if p1_move:
+                damage_dealt = prev_p2_hp - curr_p2_hp
+                if (
+                    damage_dealt is not None
+                    and damage_dealt > self.HIGH_DAMAGE_THRESHOLD
+                ):
+                    high_damage_counts["p1"] += 1
+
+            if p2_move:
+                damage_dealt = prev_p1_hp - curr_p1_hp
+                if (
+                    damage_dealt is not None
+                    and damage_dealt > self.HIGH_DAMAGE_THRESHOLD
+                ):
+                    high_damage_counts["p2"] += 1
+
+            self._update_attack_counts(
+                attack_counts, p1_move, p2_state, context.type_lookup, "p1"
+            )
+            self._update_attack_counts(
+                attack_counts, p2_move, p1_state, context.type_lookup, "p2"
             )
 
-            # --- Player 1 Team Features ---
-            p1_team = battle.get("p1_team_details", [])
-            if p1_team:
+            prev_p2_hp = curr_p2_hp
+            prev_p1_hp = curr_p1_hp
 
-                # features['p1_mean_hp'] = np.mean([p.get('base_hp', 0) for p in p1_team])
-                # features['p1_mean_spe'] = np.mean([p.get('base_spe', 0) for p in p1_team])
-                # features['p1_mean_atk'] = np.mean([p.get('base_atk', 0) for p in p1_team])
-                # features['p1_mean_def'] = np.mean([p.get('base_def', 0) for p in p1_team])
+        metrics = {
+            "attack_counts": attack_counts,
+            "explosions": explosion_flags,
+            "high_damage": high_damage_counts,
+        }
+        context.caches["timeline_metrics"] = metrics
+        return metrics
 
-                # features["p1_dead_pokemons"] = self.count_dead_pokemons(
-                #    battle_info_p1["pokemon_hp"]
-                # )
-                features["p1_hp_loss"] = self.calculate_hp_loss(
-                    battle_info_p1["pokemon_hp"]
-                )
-                # Worsens prediction by 7%, lets leave that out
-                """ features["p1_total_damage"] = self.calculate_total_damage(
-                    battle_info_p1["total_lost_health"]
-                ) """
-                features["p1_avg_status"] = (
-                    battle_info_p1["status_count"] / 30
-                )  # Divide by the total number of rounds
-                features["p1_type_compatibility"] = self.calculate_type_compatibility(
-                    battle_info_p1["pokemon_hp"], battle_info_p2["pokemon_hp"]
-                )
-                """ features["p1_avg_team_winrate"] = self.calculate_team_winrate(
-                    battle_info_p1["pokemon_hp"]
-                ) """
-                # features['p1_positive_boosts'] = battle_info_p1['positive_boosts']
-                # features['p1_negative_boosts'] = battle_info_p1['negative_boosts']
-                # --- New Feature: Successful Explosion ---
-                """ features["successful_explosion"] = 0
-                for turn in battle.get("battle_timeline", []):
-                    p1_move = turn.get("p1_move_details", {})
-                    p2_state = turn.get("p2_pokemon_state", {})
-                    if (
-                        p1_move
-                        and p1_move.get("name", "").lower() == "explosion"
-                        and p2_state.get("hp_pct", 1.0) == 0.0
-                    ):
-                        features["successful_explosion"] = 1
-                    break """
+    def _update_attack_counts(
+        self,
+        attack_counts: Dict[str, int],
+        move: Dict,
+        defender_state: Dict,
+        type_lookup: Dict[str, List[str]],
+        prefix: str,
+    ) -> None:
+        if not move:
+            return
 
-            # --- Player 2 Lead Features ---
-            p2_lead = battle.get("p2_lead_details")
-            if p2_lead:
-                # Player 2's lead Pokémon's stats
-                # features['p2_lead_hp'] = p2_lead.get('base_hp', 0)
-                # features['p2_lead_spe'] = p2_lead.get('base_spe', 0)
-                # features['p2_lead_atk'] = p2_lead.get('base_atk', 0)
-                # features['p2_lead_def'] = p2_lead.get('base_def', 0)
+        move_type = move.get("type")
+        defender_name = defender_state.get("name")
+        if not move_type or not defender_name:
+            return
 
-                # features["p2_dead_pokemons"] = self.count_dead_pokemons(
-                #    battle_info_p2["pokemon_hp"]
-                # )
-                features["p2_hp_loss"] = self.calculate_hp_loss(
-                    battle_info_p2["pokemon_hp"]
-                )
-                """ features["p2_total_damage"] = self.calculate_total_damage(
-                    battle_info_p2["total_lost_health"]
-                ) """
-                features["p2_avg_status"] = (
-                    battle_info_p2["status_count"] / 30
-                )  # Divide by the total number of rounds
-                features["p2_type_compatibility"] = self.calculate_type_compatibility(
-                    battle_info_p2["pokemon_hp"], battle_info_p1["pokemon_hp"]
-                )
-                """ features["p2_avg_team_winrate"] = self.calculate_team_winrate(
-                    battle_info_p2["pokemon_hp"]
-                ) """
-                # features['p2_positive_boosts'] = battle_info_p2['positive_boosts']
-                # features['p2_negative_boosts'] = battle_info_p2['negative_boosts']
+        defender_types = type_lookup.get(defender_name.lower())
+        if not defender_types:
+            return
 
-            # --- Battle Special Moves & Effectiveness Features ---
-            """ features["successful_explosion"] = 0
-            features["successful_explosion_p2"] = 0 
-            features["high_damage_moves_p1"] = 0
-            features["high_damage_moves_p2"] = 0 """
+        try:
+            multiplier = self._attack_calc.calculate(move_type, defender_types)
+        except Exception:
+            return
 
-            # New: counts of attack effectiveness
-            features["attacks_2x_p1"] = 0
-            features["attacks_0_5x_p1"] = 0
-            features["attacks_0x_p1"] = 0
-            features["attacks_2x_p2"] = 0
-            features["attacks_0_5x_p2"] = 0
-            features["attacks_0x_p2"] = 0
+        mapping = {
+            2.0: f"attacks_2x_{prefix}",
+            0.5: f"attacks_0_5x_{prefix}",
+            0.0: f"attacks_0x_{prefix}",
+        }
+        for value, key in mapping.items():
+            if abs(multiplier - value) < 1e-8:
+                attack_counts[key] += 1
+                break
 
-            prev_p2_hp = 1.0  # Initial HP is always 100%
-            prev_p1_hp = 1.0
+    @staticmethod
+    def _mean_team_stat(team: List[Dict], stat_key: str) -> float:
+        values: List[float] = []
+        for pokemon in team:
+            if not pokemon:
+                continue
+            value = pokemon.get(stat_key)
+            if value is None:
+                continue
+            values.append(float(value))
+        if not values:
+            return 0.0
+        return float(np.mean(values))
 
-            # Local cache of type lookup to avoid repeated loads
-            type_lookup = self._load_pokemon_types()
+    @staticmethod
+    def _lead_pokemon_stat(lead: Optional[Dict], stat_key: str) -> float:
+        if not lead:
+            return 0.0
+        value = lead.get(stat_key)
+        if value is None:
+            return 0.0
+        return float(value)
 
-            for turn in battle.get("battle_timeline", []):
-                # Check for successful explosions
-                p1_move = turn.get("p1_move_details", {})
-                p2_state = turn.get("p2_pokemon_state", {})
-                p2_move = turn.get("p2_move_details", {})
-                p1_state = turn.get("p1_pokemon_state", {})
-                """ if (
-                    p1_move
-                    and p1_move.get("name", "").lower() == "explosion"
-                    and p2_state.get("hp_pct", 1.0) == 0.0
-                ):
-                    features["successful_explosion"] = 1
-                if (
-                    p2_move
-                    and p2_move.get("name", "").lower() == "explosion"
-                    and p1_state.get("hp_pct", 1.0) == 0.0
-                ):
-                    features["successful_explosion_p2"] = 1 """
+    def _feature_p1_mean_hp(self, context: BattleContext) -> float:
+        return self._mean_team_stat(context.p1_team, "base_hp")
 
-                # Check for high damage moves
-                curr_p2_hp = p2_state.get("hp_pct", prev_p2_hp)
-                curr_p1_hp = p1_state.get("hp_pct", prev_p1_hp)
+    def _feature_p1_mean_spe(self, context: BattleContext) -> float:
+        return self._mean_team_stat(context.p1_team, "base_spe")
 
-                """ # Calculate damage dealt as percentage of current HP
-                if p1_move:
-                    damage_dealt = prev_p2_hp - curr_p2_hp
-                    if damage_dealt > 0.66:  # More than 66% damage
-                        features["high_damage_moves_p1"] += 1
+    def _feature_p1_mean_atk(self, context: BattleContext) -> float:
+        return self._mean_team_stat(context.p1_team, "base_atk")
 
-                if p2_move:
-                    damage_dealt = prev_p1_hp - curr_p1_hp
-                    if damage_dealt > 0.66:  # More than 66% damage
-                        features["high_damage_moves_p2"] += 1 """
+    def _feature_p1_mean_def(self, context: BattleContext) -> float:
+        return self._mean_team_stat(context.p1_team, "base_def")
 
-                # --- New: attack-type effectiveness counting ---
-                # Player 1 attacking moves
-                try:
-                    if p1_move:
-                        move_type = p1_move.get("type")
-                        defender_name = p2_state.get("name")
-                        if move_type and defender_name:
-                            defender_types = type_lookup.get(defender_name.lower())
-                            if defender_types:
-                                multiplier = self._attack_calc.calculate(
-                                    move_type, defender_types
-                                )
-                                if abs(multiplier - 2.0) < 1e-8:
-                                    features["attacks_2x_p1"] += 1
-                                elif abs(multiplier - 0.5) < 1e-8:
-                                    features["attacks_0_5x_p1"] += 1
-                                elif abs(multiplier - 0.0) < 1e-8:
-                                    features["attacks_0x_p1"] += 1
-                except Exception:
-                    # If types are unknown or calculation fails, skip counting for this move
-                    pass
+    def _feature_p1_dead_pokemons(self, context: BattleContext) -> int:
+        return self.count_dead_pokemons(context.battle_info_p1["pokemon_hp"])
 
-                # Player 2 attacking moves
-                try:
-                    if p2_move:
-                        move_type = p2_move.get("type")
-                        defender_name = p1_state.get("name")
-                        if move_type and defender_name:
-                            defender_types = type_lookup.get(defender_name.lower())
-                            if defender_types:
-                                multiplier = self._attack_calc.calculate(
-                                    move_type, defender_types
-                                )
-                                if abs(multiplier - 2.0) < 1e-8:
-                                    features["attacks_2x_p2"] += 1
-                                elif abs(multiplier - 0.5) < 1e-8:
-                                    features["attacks_0_5x_p2"] += 1
-                                elif abs(multiplier - 0.0) < 1e-8:
-                                    features["attacks_0x_p2"] += 1
-                except Exception:
-                    pass
+    def _feature_p1_hp_loss(self, context: BattleContext) -> float:
+        return self.calculate_hp_loss(context.battle_info_p1["pokemon_hp"])
 
-                # Update previous HP values for next turn
-                prev_p2_hp = curr_p2_hp
-                prev_p1_hp = curr_p1_hp
+    def _feature_p1_total_damage(self, context: BattleContext) -> float:
+        return self.calculate_total_damage(context.battle_info_p1["total_lost_health"])
 
-            # We also need the ID and the target variable (if it exists)
-            features["battle_id"] = battle.get("battle_id")
-            if "player_won" in battle:
-                features["player_won"] = int(battle["player_won"])
+    def _feature_p1_avg_status(self, context: BattleContext) -> float:
+        return context.battle_info_p1["status_count"] / 30.0
 
-            feature_list.append(features)
+    def _feature_p1_type_compatibility(self, context: BattleContext) -> float:
+        return self.calculate_type_compatibility(
+            context.battle_info_p1["pokemon_hp"], context.battle_info_p2["pokemon_hp"]
+        )
 
-        return pd.DataFrame(feature_list).fillna(0)
+    def _feature_p1_avg_team_winrate(self, context: BattleContext) -> float:
+        return self.calculate_team_winrate(context.battle_info_p1["pokemon_hp"])
+
+    def _feature_p1_positive_boosts(self, context: BattleContext) -> float:
+        return float(context.battle_info_p1["positive_boosts"])
+
+    def _feature_p1_negative_boosts(self, context: BattleContext) -> float:
+        return float(context.battle_info_p1["negative_boosts"])
+
+    def _feature_p2_lead_hp(self, context: BattleContext) -> float:
+        return self._lead_pokemon_stat(context.p2_lead, "base_hp")
+
+    def _feature_p2_lead_spe(self, context: BattleContext) -> float:
+        return self._lead_pokemon_stat(context.p2_lead, "base_spe")
+
+    def _feature_p2_lead_atk(self, context: BattleContext) -> float:
+        return self._lead_pokemon_stat(context.p2_lead, "base_atk")
+
+    def _feature_p2_lead_def(self, context: BattleContext) -> float:
+        return self._lead_pokemon_stat(context.p2_lead, "base_def")
+
+    def _feature_p2_dead_pokemons(self, context: BattleContext) -> int:
+        return self.count_dead_pokemons(context.battle_info_p2["pokemon_hp"])
+
+    def _feature_p2_hp_loss(self, context: BattleContext) -> float:
+        return self.calculate_hp_loss(context.battle_info_p2["pokemon_hp"])
+
+    def _feature_p2_total_damage(self, context: BattleContext) -> float:
+        return self.calculate_total_damage(context.battle_info_p2["total_lost_health"])
+
+    def _feature_p2_avg_status(self, context: BattleContext) -> float:
+        return context.battle_info_p2["status_count"] / 30.0
+
+    def _feature_p2_type_compatibility(self, context: BattleContext) -> float:
+        return self.calculate_type_compatibility(
+            context.battle_info_p2["pokemon_hp"], context.battle_info_p1["pokemon_hp"]
+        )
+
+    def _feature_p2_avg_team_winrate(self, context: BattleContext) -> float:
+        return self.calculate_team_winrate(context.battle_info_p2["pokemon_hp"])
+
+    def _feature_p2_positive_boosts(self, context: BattleContext) -> float:
+        return float(context.battle_info_p2["positive_boosts"])
+
+    def _feature_p2_negative_boosts(self, context: BattleContext) -> float:
+        return float(context.battle_info_p2["negative_boosts"])
+
+    def _feature_successful_explosion(self, context: BattleContext) -> int:
+        metrics = self._compute_timeline_metrics(context)
+        return metrics["explosions"]["p1"]
+
+    def _feature_successful_explosion_p2(self, context: BattleContext) -> int:
+        metrics = self._compute_timeline_metrics(context)
+        return metrics["explosions"]["p2"]
+
+    def _feature_high_damage_moves_p1(self, context: BattleContext) -> int:
+        metrics = self._compute_timeline_metrics(context)
+        return metrics["high_damage"]["p1"]
+
+    def _feature_high_damage_moves_p2(self, context: BattleContext) -> int:
+        metrics = self._compute_timeline_metrics(context)
+        return metrics["high_damage"]["p2"]
+
+    def _feature_attacks_2x_p1(self, context: BattleContext) -> int:
+        metrics = self._compute_timeline_metrics(context)
+        return metrics["attack_counts"]["attacks_2x_p1"]
+
+    def _feature_attacks_0_5x_p1(self, context: BattleContext) -> int:
+        metrics = self._compute_timeline_metrics(context)
+        return metrics["attack_counts"]["attacks_0_5x_p1"]
+
+    def _feature_attacks_0x_p1(self, context: BattleContext) -> int:
+        metrics = self._compute_timeline_metrics(context)
+        return metrics["attack_counts"]["attacks_0x_p1"]
+
+    def _feature_attacks_2x_p2(self, context: BattleContext) -> int:
+        metrics = self._compute_timeline_metrics(context)
+        return metrics["attack_counts"]["attacks_2x_p2"]
+
+    def _feature_attacks_0_5x_p2(self, context: BattleContext) -> int:
+        metrics = self._compute_timeline_metrics(context)
+        return metrics["attack_counts"]["attacks_0_5x_p2"]
+
+    def _feature_attacks_0x_p2(self, context: BattleContext) -> int:
+        metrics = self._compute_timeline_metrics(context)
+        return metrics["attack_counts"]["attacks_0x_p2"]
 
     def get_battle_info(self, battle_timeline: List[Dict]) -> tuple:
         """Collect battle information from the last 30 rounds. The last documented HP for each
@@ -252,14 +438,14 @@ class BattleFeatureExtractor:
         # Add additional health and status information from battle turns
         for turn in battle_timeline:
             for player_key in ["p1_pokemon_state", "p2_pokemon_state"]:
-                pokemon_state = turn.get(player_key, {})
+                pokemon_state = turn.get(player_key) or {}
                 pokemon_name = pokemon_state.get("name")
-                current_hp = pokemon_state.get("hp_pct")
-                boost_dict = pokemon_state.get(
-                    "boosts"
-                )  # Boosts can be values between +6 and -6
+                if not pokemon_name:
+                    continue
 
-                # Get the name of the dictonary to store the information based on which player it is
+                current_hp = pokemon_state.get("hp_pct")
+                boost_dict = pokemon_state.get("boosts") or {}
+
                 dict_name = (
                     battle_info_p1
                     if player_key == "p1_pokemon_state"
@@ -267,17 +453,18 @@ class BattleFeatureExtractor:
                 )
 
                 former_hp = dict_name["pokemon_hp"].get(pokemon_name, 1.0)
-                dict_name["pokemon_hp"][pokemon_name] = current_hp
-                lost = abs(former_hp - current_hp)
-                dict_name["total_lost_health"][pokemon_name] = (
-                    dict_name["total_lost_health"].get(pokemon_name, 0) + lost
-                )
+
+                if current_hp is not None:
+                    dict_name["pokemon_hp"][pokemon_name] = current_hp
+                    lost = abs(former_hp - current_hp)
+                    dict_name["total_lost_health"][pokemon_name] = (
+                        dict_name["total_lost_health"].get(pokemon_name, 0.0) + lost
+                    )
 
                 for value in boost_dict.values():
                     if value > 0:
                         dict_name["positive_boosts"] += value
                     elif value < 0:
-                        # The boost is just a negative value to show that it is a bad boost
                         dict_name["negative_boosts"] += -1 * value
 
                 if pokemon_state.get("status") in NEGATIVE_STATUS:
@@ -298,6 +485,8 @@ class BattleFeatureExtractor:
         """
         total_hp_loss = 0
         for end_hp in hp_dict.values():
+            if end_hp is None:
+                continue
             start_hp = 1.0  # Assuming all Pokémon start with full HP (1.0)
             hp_loss = start_hp - end_hp
             total_hp_loss += hp_loss
@@ -312,6 +501,8 @@ class BattleFeatureExtractor:
         """
         total_damage_pct = 0
         for end_damage in hp_dict.values():
+            if end_damage is None:
+                continue
             total_damage_pct += end_damage
 
         return total_damage_pct
