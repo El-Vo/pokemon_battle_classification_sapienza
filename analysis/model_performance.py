@@ -51,9 +51,9 @@ class ModelPerformanceReport:
 
 
 def summarize_model_performance(
-    model: ClassifierMixin,
+    model: ClassifierMixin | Pipeline,
     X: pd.DataFrame,
-    y: Sequence,
+    y: Sequence | pd.Series,
     feature_names: Optional[Sequence[str]] = None,
     *,
     label_names: Optional[Iterable] = None,
@@ -87,7 +87,7 @@ def summarize_model_performance(
 
 
 def _extract_feature_weights(
-    model: ClassifierMixin, feature_names: Sequence[str]
+    model: ClassifierMixin | Pipeline, feature_names: Sequence[str]
 ) -> pd.DataFrame:
     estimator, transformer = _unwrap_linear_components(model)
 
@@ -121,7 +121,7 @@ def _extract_feature_weights(
 
 
 def _summarize_coefficients(
-    model: ClassifierMixin,
+    model: ClassifierMixin | Pipeline,
     X: pd.DataFrame,
     y: Sequence,
     feature_names: Sequence[str],
@@ -200,7 +200,7 @@ def _summarize_coefficients(
 
 
 def _unwrap_linear_components(
-    model: ClassifierMixin,
+    model: ClassifierMixin | Pipeline,
 ) -> tuple[Optional[ClassifierMixin], Optional[Pipeline]]:
     if hasattr(model, "best_estimator_"):
         best_estimator = getattr(model, "best_estimator_")

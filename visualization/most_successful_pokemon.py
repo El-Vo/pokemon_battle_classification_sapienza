@@ -1,7 +1,7 @@
-from pathlib import Path
-import sys
 from collections import Counter
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+import sys
 
 import matplotlib.pyplot as plt
 import seaborn as sns

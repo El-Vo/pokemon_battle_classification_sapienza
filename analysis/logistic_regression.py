@@ -1,11 +1,11 @@
+from typing import Optional
+
 import pandas as pd
+from sklearn.model_selection import GridSearchCV
+from sklearn.pipeline import make_pipeline, Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression as SklearnLogisticRegression
 from sklearn.metrics import accuracy_score
-from typing import Optional
-
-from sklearn.model_selection import GridSearchCV
-from sklearn.pipeline import make_pipeline, Pipeline
 
 from analysis.accuracy_results_logger import AccuracyResultsLogger
 from analysis.model_performance import (
@@ -15,7 +15,6 @@ from analysis.model_performance import (
 
 
 class RunLogisticRegression:
-
     def __init__(self, train_df: pd.DataFrame, feature_names):
         self.train_df = train_df
         self.train_feature_names = feature_names

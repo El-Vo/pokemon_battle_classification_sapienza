@@ -1,6 +1,4 @@
 import json
-import pandas as pd
-import os
 
 
 class ImportSource:
@@ -40,7 +38,7 @@ class ImportSource:
             print(f"Successfully loaded {len(json_data)} battles.")
         else:
             self.data.append(json_data)
-            print(f"Successfully loaded 1 battle.")
+            print("Successfully loaded 1 battle.")
 
     def display_first_battle(self, truncate: int = 1, truncate_threshold: int = 1) -> None:
         """Print the structure of the first loaded battle.
