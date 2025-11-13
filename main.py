@@ -1,12 +1,15 @@
+from typing import Any
+
 from pandas import DataFrame
 from sklearn.ensemble import RandomForestClassifier, StackingClassifier
+
 from prepare_data.import_source import ImportSource
 from analysis.create_simple_features import BattleFeatureExtractor
 from analysis.logistic_regression import RunLogisticRegression
 from analysis.stacking_model import RunStackingModel
+from analysis.gradient_boosting import RunGradientBoosting
 from analysis.test_model import TestModel
 from analysis.feature_correlation import FeatureCorrelationAnalyzer
-from sklearn.pipeline import Pipeline
 
 
 def create_training_features() -> tuple[DataFrame, list]:
@@ -26,10 +29,22 @@ def create_training_features() -> tuple[DataFrame, list]:
     return train_df, train_feature_names
 
 
-def train_logistic_regression_model(
-    train_dataframe: DataFrame, train_feature_names: list, log_results: bool = False
-) -> Pipeline:
-    trainer = RunLogisticRegression(train_dataframe, train_feature_names)
+def train_model(
+    train_dataframe: DataFrame,
+    train_feature_names: list,
+    log_results: bool = False,
+    algorithm: str = "logistic_regression",
+) -> Any:
+    trainers = {
+        "logistic_regression": RunLogisticRegression,
+        "gradient_boosting": RunGradientBoosting,
+    }
+
+    trainer_cls = trainers.get(algorithm)
+    if trainer_cls is None:
+        raise ValueError(f"Unsupported algorithm: {algorithm}")
+
+    trainer = trainer_cls(train_dataframe, train_feature_names)
     model = trainer.train_model(log_results)
 
     performance_report = trainer.evaluate_training_performance()
@@ -50,7 +65,7 @@ def train_stacking_model(
     return model
 
 
-def test_logistic_regression_model(model: Pipeline, features: list) -> None:
+def test_trained_model(model: Any, features: list) -> None:
     test_data_importer = ImportSource()
     test_data_importer.load_jsonl("./data/test.jsonl")
     test_data_extractor = BattleFeatureExtractor(test_data_importer.data)
@@ -60,7 +75,7 @@ def test_logistic_regression_model(model: Pipeline, features: list) -> None:
 
 
 def predict_single_battle(
-    model: Pipeline,
+    model: Any,
     features: list,
     battles_df: DataFrame,
     random_state: int | None = None,
@@ -140,8 +155,8 @@ if __name__ == "__main__":
     feature_correlation.compute_correlation()
     print(feature_correlation.top_correlated_pairs(0))
 
-    # model = train_logistic_regression_model(train_df, feature_names)
-    model = train_stacking_model(train_df, feature_names)
+    algorithm = "logistic_regression"
+    model = train_model(train_df, feature_names, True, algorithm)
 
     # Run this block to analyse a live match you are watching in the browser
     """ battle_file_name = (
@@ -160,4 +175,4 @@ if __name__ == "__main__":
 
     # Run this part if you want to let the model predict the outcomes for the
     # test dataset, create a submission csv file and save it to the 'results' directory
-    """ test_logistic_regression_model(model, feature_names) """
+    test_trained_model(model, feature_names)

@@ -69,9 +69,9 @@ class BattleFeatureExtractor:
                 features["p1_type_compatibility"] = self.calculate_type_compatibility(
                     battle_info_p1["pokemon_hp"], battle_info_p2["pokemon_hp"]
                 )
-                features["p1_avg_team_winrate"] = self.calculate_team_winrate(
+                """ features["p1_avg_team_winrate"] = self.calculate_team_winrate(
                     battle_info_p1["pokemon_hp"]
-                )
+                ) """
                 # features['p1_positive_boosts'] = battle_info_p1['positive_boosts']
                 # features['p1_negative_boosts'] = battle_info_p1['negative_boosts']
                 # --- New Feature: Successful Explosion ---
@@ -111,9 +111,9 @@ class BattleFeatureExtractor:
                 features["p2_type_compatibility"] = self.calculate_type_compatibility(
                     battle_info_p2["pokemon_hp"], battle_info_p1["pokemon_hp"]
                 )
-                features["p2_avg_team_winrate"] = self.calculate_team_winrate(
+                """ features["p2_avg_team_winrate"] = self.calculate_team_winrate(
                     battle_info_p2["pokemon_hp"]
-                )
+                ) """
                 # features['p2_positive_boosts'] = battle_info_p2['positive_boosts']
                 # features['p2_negative_boosts'] = battle_info_p2['negative_boosts']
 
