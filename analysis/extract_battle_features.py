@@ -57,8 +57,6 @@ class BattleFeatureExtractor:
         "p2_negative_boosts": "_feature_p2_negative_boosts",
         "successful_explosion": "_feature_successful_explosion",
         "successful_explosion_p2": "_feature_successful_explosion_p2",
-        "high_damage_moves_p1": "_feature_high_damage_moves_p1",
-        "high_damage_moves_p2": "_feature_high_damage_moves_p2",
         "attacks_2x_p1": "_feature_attacks_2x_p1",
         "attacks_0_5x_p1": "_feature_attacks_0_5x_p1",
         "attacks_0x_p1": "_feature_attacks_0x_p1",
@@ -66,8 +64,6 @@ class BattleFeatureExtractor:
         "attacks_0_5x_p2": "_feature_attacks_0_5x_p2",
         "attacks_0x_p2": "_feature_attacks_0x_p2",
     }
-
-    HIGH_DAMAGE_THRESHOLD = 0.66
 
     def __init__(self, data: List[Dict], enabled_features: List[str]):
         self.data = data

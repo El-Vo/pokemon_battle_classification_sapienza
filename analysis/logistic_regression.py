@@ -28,7 +28,7 @@ class RunLogisticRegression:
         y_train = self.train_df["player_won"]
 
         # Initialize and train the model
-        print("Training a simple Logistic Regression model...")
+        print("Training a Logistic Regression model...")
 
         # Define the parameter grid to search
         param_grid = [
