@@ -66,7 +66,7 @@ def test_trained_model(model: Any, features: list, test_data_filepath: str) -> N
     )
     test_df = test_data_extractor.process()
     test = TestModel(model, test_df, features)
-    test.test()
+    test.test("results")
 
 
 if __name__ == "__main__":
