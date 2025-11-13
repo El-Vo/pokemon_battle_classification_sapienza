@@ -1,7 +1,5 @@
-import json
 from collections import Counter
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import numpy as np
@@ -9,6 +7,7 @@ import pandas as pd
 from tqdm.auto import tqdm
 
 from tools.calculate_attack_effectiveness import AttackEffectivenessCalculator
+from tools.list_all_pokemon import PokemonRosterSummary
 
 NEGATIVE_STATUS = ["par", "brn", "frz", "slp", "psn", "tox"]
 
@@ -100,6 +99,7 @@ class BattleFeatureExtractor:
 
             for feature_name in self.enabled_features:
                 builder_name = self.FEATURE_BUILDERS[feature_name]
+                # Retrieve function names for individual attributes and run their computation
                 builder = getattr(self, builder_name)
                 try:
                     row[feature_name] = builder(context)
@@ -177,7 +177,6 @@ class BattleFeatureExtractor:
             "attacks_0x_p2": 0,
         }
         explosion_flags = {"p1": 0, "p2": 0}
-        high_damage_counts = {"p1": 0, "p2": 0}
 
         prev_p2_hp = 1.0
         prev_p1_hp = 1.0
@@ -204,22 +203,6 @@ class BattleFeatureExtractor:
             if curr_p1_hp is None:
                 curr_p1_hp = prev_p1_hp
 
-            if p1_move:
-                damage_dealt = prev_p2_hp - curr_p2_hp
-                if (
-                    damage_dealt is not None
-                    and damage_dealt > self.HIGH_DAMAGE_THRESHOLD
-                ):
-                    high_damage_counts["p1"] += 1
-
-            if p2_move:
-                damage_dealt = prev_p1_hp - curr_p1_hp
-                if (
-                    damage_dealt is not None
-                    and damage_dealt > self.HIGH_DAMAGE_THRESHOLD
-                ):
-                    high_damage_counts["p2"] += 1
-
             self._update_attack_counts(
                 attack_counts, p1_move, p2_state, context.type_lookup, "p1"
             )
@@ -233,7 +216,6 @@ class BattleFeatureExtractor:
         metrics = {
             "attack_counts": attack_counts,
             "explosions": explosion_flags,
-            "high_damage": high_damage_counts,
         }
         context.caches["timeline_metrics"] = metrics
         return metrics
@@ -318,6 +300,7 @@ class BattleFeatureExtractor:
         return self.calculate_total_damage(context.battle_info_p1["total_lost_health"])
 
     def _feature_p1_avg_status(self, context: BattleContext) -> float:
+        """Returns the percentage of rounds with a bad status"""
         return context.battle_info_p1["status_count"] / 30.0
 
     def _feature_p1_type_compatibility(self, context: BattleContext) -> float:
@@ -356,6 +339,7 @@ class BattleFeatureExtractor:
         return self.calculate_total_damage(context.battle_info_p2["total_lost_health"])
 
     def _feature_p2_avg_status(self, context: BattleContext) -> float:
+        """Returns the percentage of rounds with a bad status"""
         return context.battle_info_p2["status_count"] / 30.0
 
     def _feature_p2_type_compatibility(self, context: BattleContext) -> float:
@@ -373,20 +357,16 @@ class BattleFeatureExtractor:
         return float(context.battle_info_p2["negative_boosts"])
 
     def _feature_successful_explosion(self, context: BattleContext) -> int:
+        """Counts if player had at least one successful explosion (1) or none (0)
+        in a boolean value"""
         metrics = self._compute_timeline_metrics(context)
         return metrics["explosions"]["p1"]
 
     def _feature_successful_explosion_p2(self, context: BattleContext) -> int:
+        """Counts if player had at least one successful explosion (1) or none (0)
+        in a boolean value"""
         metrics = self._compute_timeline_metrics(context)
         return metrics["explosions"]["p2"]
-
-    def _feature_high_damage_moves_p1(self, context: BattleContext) -> int:
-        metrics = self._compute_timeline_metrics(context)
-        return metrics["high_damage"]["p1"]
-
-    def _feature_high_damage_moves_p2(self, context: BattleContext) -> int:
-        metrics = self._compute_timeline_metrics(context)
-        return metrics["high_damage"]["p2"]
 
     def _feature_attacks_2x_p1(self, context: BattleContext) -> int:
         metrics = self._compute_timeline_metrics(context)
@@ -510,7 +490,6 @@ class BattleFeatureExtractor:
     def calculate_type_compatibility(
         self, hp_dict_attacker: Dict[str, float], hp_dict_defender: Dict[str, float]
     ):
-        battle_id = self._active_battle_id
         attacker_names = {
             name
             for name, hp in hp_dict_attacker.items()
@@ -568,67 +547,42 @@ class BattleFeatureExtractor:
 
         return float(np.mean(values))
 
-    def _load_team_rosters(self) -> Dict[int, Dict[str, List[str]]]:
-        if self._team_rosters is None:
-            roster_path = self._data_path("team_rosters_train.json")
-            if roster_path.exists():
-                with roster_path.open("r", encoding="utf-8") as f:
-                    entries = json.load(f)
-                self._team_rosters = {
-                    int(entry["battle_id"]): {
-                        "p1_team": entry.get("p1_team", []),
-                        "p2_team": entry.get("p2_team", []),
-                    }
-                    for entry in entries
-                }
-            else:
-                self._team_rosters = {}
-        return self._team_rosters
-
     def _load_pokemon_types(self) -> Dict[str, List[str]]:
         if self._pokemon_types is None:
-            roster_path = self._data_path("pokemon_roster.json")
-            if not roster_path.exists():
-                raise FileNotFoundError(f"Pokemon roster file not found: {roster_path}")
-
+            summary = PokemonRosterSummary(self.data).build_summary()
             type_map: Dict[str, List[str]] = {}
-            with roster_path.open("r", encoding="utf-8") as f:
-                pokedex = json.load(f)
-            for entry in pokedex:
-                name = entry.get("name")
-                types = entry.get("p1_attributes", {}).get("types", [])
-                if not name:
-                    continue
-                normalized = [
-                    t.strip().upper() for t in types if t and t.lower() != "notype"
+
+            for name, entry in summary.items():
+                attributes = entry.get("p1_attributes") or {}
+                types = attributes.get("types") or []
+                normalized_types = [
+                    t.strip().upper()
+                    for t in types
+                    if t and t.strip().lower() != "notype"
                 ]
-                if not normalized:
-                    normalized = ["NORMAL"]
-                type_map[name.lower()] = normalized
+                if not normalized_types:
+                    normalized_types = ["NORMAL"]
+                type_map[name] = normalized_types
 
             self._pokemon_types = type_map
         return self._pokemon_types
 
     def _load_pokemon_win_rates(self) -> Dict[str, float]:
         if self._pokemon_win_rates is None:
-            win_counts = self._fetch_global_win_counts()
+            win_counts = self._compute_win_counts_from_data()
             appearance_counter: Counter[str] = Counter()
 
             for battle in self.data:
-                for team_key in ("p1_team_details", "p2_team_details"):
-                    for pokemon in battle.get(team_key, []) or []:
-                        name = pokemon.get("name")
-                        if not name:
-                            continue
-                        normalized = name.strip().lower()
-                        if normalized:
-                            appearance_counter[normalized] += 1
+                for pokemon in battle.get("p1_team_details", []) or []:
+                    name = pokemon.get("name")
+                    if not name:
+                        continue
+                    normalized = name.strip().lower()
+                    if normalized:
+                        appearance_counter[normalized] += 1
 
             win_rates: Dict[str, float] = {}
             for name, total in appearance_counter.items():
-                if total <= 0:
-                    win_rates[name] = 0.0
-                    continue
                 wins = win_counts.get(name, 0)
                 win_rates[name] = wins / total
 
@@ -636,31 +590,16 @@ class BattleFeatureExtractor:
 
         return self._pokemon_win_rates
 
-    def _fetch_global_win_counts(self) -> Dict[str, int]:
-        try:
-            from visualization.most_successful_pokemon import (
-                MostSuccessfulPokemonVisualizer,
-            )
-
-            visualizer = MostSuccessfulPokemonVisualizer()
-            win_counts = visualizer.compute_win_counts()
-            return {
-                name.strip().lower(): count
-                for name, count in win_counts.items()
-                if name
-            }
-        except Exception:
-            return self._compute_win_counts_from_data()
-
     def _compute_win_counts_from_data(self) -> Dict[str, int]:
         counter: Counter[str] = Counter()
         for battle in self.data:
             player_won = battle.get("player_won")
             if player_won is None:
                 continue
+            elif bool(player_won) is False:
+                continue
 
-            winning_key = "p1_team_details" if bool(player_won) else "p2_team_details"
-            for pokemon in battle.get(winning_key, []) or []:
+            for pokemon in battle.get("p1_team_details", []) or []:
                 name = pokemon.get("name")
                 if not name:
                     continue
@@ -669,7 +608,3 @@ class BattleFeatureExtractor:
                     counter[normalized] += 1
 
         return dict(counter)
-
-    @staticmethod
-    def _data_path(filename: str) -> Path:
-        return Path(__file__).resolve().parents[1] / "visualization" / filename

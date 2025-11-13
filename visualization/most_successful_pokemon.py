@@ -15,7 +15,7 @@ from prepare_data.import_source import ImportSource
 
 
 class MostSuccessfulPokemonVisualizer:
-    """Create a bar chart for Pokémon and the number of battles they won."""
+    """Create a bar chart for Pokémon and the number of battles they won in player team one."""
 
     def __init__(self, data_path: str = "./data") -> None:
         self.data_source = ImportSource()
@@ -34,9 +34,10 @@ class MostSuccessfulPokemonVisualizer:
             player_won = battle.get("player_won")
             if player_won is None:
                 continue
+            elif bool(player_won) is False:
+                continue
 
-            winning_key = "p1_team_details" if bool(player_won) else "p2_team_details"
-            for pokemon in battle.get(winning_key, []):
+            for pokemon in battle.get("p1_team_details"):
                 name = pokemon.get("name")
                 if not name:
                     continue

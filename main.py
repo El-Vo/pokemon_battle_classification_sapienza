@@ -155,6 +155,41 @@ def predict_single_battle(
 
 
 if __name__ == "__main__":
+    all_features = [
+        "p1_mean_hp",
+        "p1_mean_spe",
+        "p1_mean_atk",
+        "p1_mean_def",
+        "p1_dead_pokemons",
+        "p1_hp_loss",
+        "p1_total_damage",
+        "p1_avg_status",
+        "p1_type_compatibility",
+        "p1_avg_team_winrate",
+        "p1_positive_boosts",
+        "p1_negative_boosts",
+        "p2_lead_hp",
+        "p2_lead_spe",
+        "p2_lead_atk",
+        "p2_lead_def",
+        "p2_dead_pokemons",
+        "p2_hp_loss",
+        "p2_total_damage",
+        "p2_avg_status",
+        "p2_type_compatibility",
+        "p2_avg_team_winrate",
+        "p2_positive_boosts",
+        "p2_negative_boosts",
+        "successful_explosion",
+        "successful_explosion_p2",
+        "attacks_2x_p1",
+        "attacks_0_5x_p1",
+        "attacks_0x_p1",
+        "attacks_2x_p2",
+        "attacks_0_5x_p2",
+        "attacks_0x_p2",
+    ]
+
     configured_features = [
         "p1_hp_loss",
         "p1_avg_status",
@@ -168,6 +203,7 @@ if __name__ == "__main__":
         "attacks_2x_p2",
         "attacks_0_5x_p2",
         "attacks_0x_p2",
+        "p1_avg_team_winrate",
     ]
 
     [train_df, feature_names] = create_training_features(configured_features)
