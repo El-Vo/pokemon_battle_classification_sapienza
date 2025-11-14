@@ -1,131 +1,93 @@
 from __future__ import annotations
-import json
-import os
-from typing import Any, Dict, Iterable, List, Optional
+
+from typing import Any, Dict, Iterable, List, Optional, Set
 
 
 class PokemonRosterSummary:
-	"""Aggregate how often each Pokémon appears in player teams.
+    """Aggregate how often each Pokémon appears in player teams.
 
-	The summary keeps track of how many battles a Pokémon appears in for
-	player 1 (p1) and player 2 (p2). When the Pokémon is part of a
-	player-1 team, its full attribute payload (level, types, base stats, …)
-	is stored so the resulting JSON mirrors the structure found in the
-	training data.
-	"""
+    The summary keeps track of how many battles a Pokémon appears in for both
+    players and returns the aggregation as a dictionary keyed by normalized
+    Pokémon names.
+    """
 
-	def __init__(self, battles: Iterable[Dict[str, Any]]):
-		# Store a list so we can iterate multiple times without consuming generators
-		self.battles: List[Dict[str, Any]] = list(battles)
-		self._summary: Optional[List[Dict[str, Any]]] = None
+    def __init__(self, battles: Iterable[Dict[str, Any]]):
+        self.battles: List[Dict[str, Any]] = list(battles)
+        self._summary: Optional[Dict[str, Dict[str, Any]]] = None
 
-	def build_summary(self) -> List[Dict[str, Any]]:
-		"""Build (and cache) the aggregated Pokémon summary."""
-		if self._summary is None:
-			summary_map: Dict[str, Dict[str, Any]] = {}
+    def build_summary(self) -> Dict[str, Dict[str, Any]]:
+        """Build (and cache) the aggregated Pokémon summary keyed by name."""
+        if self._summary is None:
+            summary_map: Dict[str, Dict[str, Any]] = {}
 
-			for battle in self.battles:
-				# --- Player 1 team members ---
-				p1_seen_in_battle = set()
-				# this construction with .get('p1_team_details', []) or [] is a defensive way to protect us from missing/None/'falsy' values
-				for pokemon in battle.get('p1_team_details', []) or []:
-					name = pokemon.get('name')
-					if not name:
-						continue
+            for battle in self.battles:
+                p1_seen_in_battle: Set[str] = set()
+                for pokemon in battle.get("p1_team_details") or []:
+                    if not isinstance(pokemon, dict):
+                        continue
 
-					if name not in summary_map:
-						summary_map[name] = self._empty_entry(name)
-					entry = summary_map[name]
-					if name not in p1_seen_in_battle:
-						entry['count_p1'] += 1
-						p1_seen_in_battle.add(name)
+                    normalized_name = self._normalize_name(pokemon.get("name"))
+                    if normalized_name is None:
+                        continue
 
-					# Persist the attribute payload the first time we encounter it
-					if 'p1_attributes' not in entry:
-						entry['p1_attributes'] = self._extract_pokemon_attributes(pokemon)
+                    entry = summary_map.setdefault(
+                        normalized_name, self._empty_entry(normalized_name)
+                    )
 
-				# --- Player 2 roster ---
-				p2_names = set()
+                    if normalized_name not in p1_seen_in_battle:
+                        entry["count_p1"] += 1
+                        p1_seen_in_battle.add(normalized_name)
 
-				lead = battle.get('p2_lead_details')
-				if isinstance(lead, dict):
-					name = lead.get('name')
-					if name:
-						p2_names.add(name)
+                    if entry.get("p1_attributes") is None:
+                        entry["p1_attributes"] = self._extract_pokemon_attributes(
+                            pokemon
+                        )
 
-				for opponent in battle.get('p2_team_details', []) or []:
-					name = opponent.get('name') if isinstance(opponent, dict) else None
-					if name:
-						p2_names.add(name)
+                for name in self._collect_p2_names(battle):
+                    entry = summary_map.setdefault(name, self._empty_entry(name))
+                    entry["count_p2"] += 1
 
-				for turn in battle.get('battle_timeline', []) or []:
-					state = turn.get('p2_pokemon_state')
-					if isinstance(state, dict):
-						name = state.get('name')
-						if name:
-							p2_names.add(name)
+            self._summary = summary_map
 
-				for name in p2_names:
-					if name not in summary_map:
-						summary_map[name] = self._empty_entry(name)
-					entry = summary_map[name]
-					entry['count_p2'] += 1
+        return self._summary
 
-			self._summary = sorted(summary_map.values(), key=lambda item: item['name'])
+    @staticmethod
+    def _normalize_name(name: Optional[str]) -> Optional[str]:
+        if not name:
+            return None
+        normalized = name.strip().lower()
+        return normalized or None
 
-		return self._summary
+    def _collect_p2_names(self, battle: Dict[str, Any]) -> Set[str]:
+        names: Set[str] = set()
 
-	def to_json(self, indent: int = 2) -> str:
-		"""Return the summary encoded as a JSON string."""
-		summary = self.build_summary()
-		return json.dumps(summary, indent=indent, ensure_ascii=False)
+        lead = battle.get("p2_lead_details")
+        if isinstance(lead, dict):
+            normalized = self._normalize_name(lead.get("name"))
+            if normalized is not None:
+                names.add(normalized)
 
-	def save(self, filepath: str, indent: int = 2) -> None:
-		"""Persist the summary JSON to ``filepath`` (creating directories if required)."""
-		summary_json = self.to_json(indent=indent)
-		directory = os.path.dirname(filepath)
-		if directory:
-			os.makedirs(directory, exist_ok=True)
-		with open(filepath, 'w', encoding='utf-8') as f:
-			f.write(summary_json)
+        for turn in battle.get("battle_timeline") or []:
+            if not isinstance(turn, dict):
+                continue
+            state = turn.get("p2_pokemon_state")
+            if isinstance(state, dict):
+                normalized = self._normalize_name(state.get("name"))
+                if normalized is not None:
+                    names.add(normalized)
 
-	@staticmethod
-	def _empty_entry(name: str) -> Dict[str, Any]:
-		return {
-			'name': name,
-			'count_p1': 0,
-			'count_p2': 0,
-		}
+        return names
 
-	@staticmethod
-	def _extract_pokemon_attributes(pokemon: Dict[str, Any]) -> Dict[str, Any]:
-		"""Return a shallow copy of all attributes except the name."""
-		return {key: value for key, value in pokemon.items() if key != 'name'}
+    @staticmethod
+    def _empty_entry(name: str) -> Dict[str, Any]:
+        return {
+            "name": name,
+            "count_p1": 0,
+            "count_p2": 0,
+            "p1_attributes": None,
+        }
 
-if __name__ == '__main__':
-	# If the script is executed directly from the 'analysis' folder, ensure the
-	# project root is on sys.path so 'prepare_data' can be imported.
-	import sys
-	from pathlib import Path
-
-	root = Path(__file__).resolve().parents[1]
-	if str(root) not in sys.path:
-		sys.path.insert(0, str(root))
-
-	# Local import after ensuring the project root is on sys.path
-	from prepare_data.import_source import ImportSource
-
-	train_importer = ImportSource()
-	train_importer.load_jsonl('./data/train.jsonl')
-	test_importer = ImportSource()
-	test_importer.load_jsonl('./data/test.jsonl')
-
-	# Combine train and test battles so the roster includes Pokémon from both splits
-	all_battles = train_importer.data + test_importer.data
-
-	summary = PokemonRosterSummary(all_battles)
-	output_path = 'data/pokemon_roster.json'
-	summary.save(output_path)
-
-	print(f"Loaded {len(train_importer.data)} train battles and {len(test_importer.data)} test battles.")
-	print(f"Exported {len(summary.build_summary())} Pokémon to {output_path}")
+    @staticmethod
+    def _extract_pokemon_attributes(pokemon: Dict[str, Any]) -> Dict[str, Any]:
+        """Return a shallow copy of all attributes except the name."""
+        return {key: value for key, value in pokemon.items() if key != "name"}

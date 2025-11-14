@@ -1,7 +1,7 @@
-pandas
-numpy
-tqdm
-scikit-learn
-matplotlib
-seaborn
 beautifulsoup4
+matplotlib
+numpy
+pandas
+scikit-learn
+seaborn
+tqdm
